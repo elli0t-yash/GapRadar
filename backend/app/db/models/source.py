@@ -4,8 +4,8 @@ from sqlalchemy import Boolean, Enum, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.models.enums import SourceType
 from app.db.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
+from app.domain.enums import SourceType
 
 if TYPE_CHECKING:
     from app.db.models.collector import Collector

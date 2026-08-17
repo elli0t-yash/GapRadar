@@ -5,8 +5,8 @@ from sqlalchemy import Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.models.enums import CollectorStatus
 from app.db.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
+from app.domain.enums import CollectorStatus
 
 if TYPE_CHECKING:
     from app.db.models.collector_run import CollectorRun
