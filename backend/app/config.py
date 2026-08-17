@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173"
 
     BRIGHTDATA_API_KEY: str = ""
+    BRIGHTDATA_BASE_URL: str = "https://api.brightdata.com"
     HARNESS_API_KEY: str = ""
 
     @property
