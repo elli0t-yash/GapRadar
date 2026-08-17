@@ -1,0 +1,90 @@
+name: Release Publish
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-on-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select or create next vN tag
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git fetch --tags --force
+
+          # Rerun-safe: if this exact commit already has a vN tag, reuse it.
+          existing_tag="$(git tag --points-at "$GITHUB_SHA" | grep -E '^v[0-9]+$' | head -n1 || true)"
+          if [[ -n "$existing_tag" ]]; then
+            echo "tag_name=$existing_tag" >> "$GITHUB_OUTPUT"
+            echo "release_name=Release $existing_tag" >> "$GITHUB_OUTPUT"
+            echo "Reusing existing tag $existing_tag on $GITHUB_SHA"
+            exit 0
+          fi
+
+          # Create the next integer tag; retry if another run wins a race.
+          for attempt in 1 2 3; do
+            latest_num="$(git tag -l 'v[0-9]*' | sed -E 's/^v([0-9]+)$/\1/' | sort -n | tail -n1)"
+            if [[ -z "$latest_num" ]]; then
+              latest_num=0
+            fi
+            next_num=$((latest_num + 1))
+            tag_name="v${next_num}"
+
+            if git rev-parse -q --verify "refs/tags/${tag_name}" >/dev/null; then
+              git fetch --tags --force
+              continue
+            fi
+
+            git tag "$tag_name" "$GITHUB_SHA"
+            if git push origin "refs/tags/${tag_name}"; then
+              echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
+              echo "release_name=Release $tag_name" >> "$GITHUB_OUTPUT"
+              echo "Created tag $tag_name on attempt $attempt"
+              exit 0
+            fi
+
+            git tag -d "$tag_name" || true
+            git fetch --tags --force
+          done
+
+          echo "Failed to create a release tag after retries." >&2
+          exit 1
+
+      - name: Create GitHub release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          tag_name='${{ steps.version.outputs.tag_name }}'
+          release_name='${{ steps.version.outputs.release_name }}'
+
+          if gh release view "$tag_name" >/dev/null 2>&1; then
+            echo "Release for $tag_name already exists. Skipping."
+            exit 0
+          fi
+
+          gh release create "$tag_name" \
+            --title "$release_name" \
+            --target "$GITHUB_SHA" \
+            --generate-notes
+
+          echo "Created release $release_name"
