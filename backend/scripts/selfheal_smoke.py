@@ -1,8 +1,12 @@
-"""Run ONE real Bright Data self-healing attempt, by hand.
+"""Drive ONE real Bright Data repair by hand -- resuming it if it exists.
 
 Never imported by the application and never executed by pytest. It exists
 so a demo can drive the real provider against a deliberately broken
 DEVELOPMENT collector and watch RecallGuard decide.
+
+Safe to re-run: it asks Bright Data whether a repair is already in flight
+and rejoins that one rather than triggering a second, so a rerun after a
+local timeout continues the same attempt instead of starting another.
 
     cd backend
     uv run python scripts/selfheal_smoke.py \
@@ -42,18 +46,23 @@ from app.config import get_settings
 from app.db.models import Collector
 from app.integrations.brightdata.client import BrightDataClient
 from app.logging_config import configure_logging
-from app.recallguard.healing import execute_healing_attempt
+from app.recallguard.healing import resume_or_execute_healing_attempt
 from app.recallguard.schemas import BaselineProfile
 from app.recallguard.service import active_incident
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run ONE real Bright Data self-healing attempt by hand.",
+        description=(
+            "Resume the collector's in-flight Bright Data repair, or run ONE "
+            "real self-healing attempt by hand."
+        ),
         epilog=(
-            "This makes live provider calls: it triggers a self-healing job, "
-            "decides whether to approve the candidate, and -- if approved -- "
-            "runs a real production collection to verify it.\n"
+            "This makes live provider calls: it asks whether a repair is "
+            "already running (resuming it if so, without triggering another), "
+            "otherwise triggers a self-healing job, decides whether to approve "
+            "the candidate, and -- if approved -- runs a real production "
+            "collection to verify it.\n"
             "Point it at a deliberately broken DEVELOPMENT collector, never "
             "the verified production one.\n\n"
             "Credentials come from the environment (BRIGHTDATA_API_KEY) and "
@@ -107,7 +116,7 @@ def main() -> int:
             f"incident={incident.id} status={incident.status.value} "
             f"attempts={incident.repair_attempts}"
         )
-        result = execute_healing_attempt(
+        result = resume_or_execute_healing_attempt(
             session,
             client,
             incident=incident,

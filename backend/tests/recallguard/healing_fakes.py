@@ -26,6 +26,7 @@ class ScriptedProvider:
         heal_response: httpx.Response | None = None,
         progress_response: httpx.Response | None = None,
         resume_response: httpx.Response | None = None,
+        repair_in_flight: bool = False,
     ) -> None:
         self.progress = progress or []
         self.dataset = dataset if dataset is not None else []
@@ -35,6 +36,12 @@ class ScriptedProvider:
         self.resume_response = resume_response
         self.requests: list[httpx.Request] = []
         self.progress_index = 0
+        # Whether a self-healing job already exists when the test starts.
+        # False is the real state of a collector that has never been
+        # healed: the progress endpoint has no job to report, so it
+        # answers 404 rather than a status. Set True to stand in for a
+        # repair an earlier process left running at the provider.
+        self.repair_in_flight = repair_in_flight
 
     # -- recorded traffic -------------------------------------------------
     def paths(self, fragment: str) -> list[httpx.Request]:
@@ -69,6 +76,8 @@ class ScriptedProvider:
         if path.endswith("/refactor_template/progress"):
             if self.progress_response is not None:
                 return self.progress_response
+            if not self.repair_in_flight and not self.heal_requests:
+                return httpx.Response(404, json={"error": "no self-healing job"})
             index = min(self.progress_index, len(self.progress) - 1)
             self.progress_index += 1
             return httpx.Response(200, json=self.progress[index])
@@ -106,8 +115,41 @@ def awaiting_approval(preview: list[dict[str, Any]] | None = None) -> dict[str, 
     return payload
 
 
+def awaiting_approval_without_preview() -> dict[str, Any]:
+    """The gate exactly as production reached it, with nothing to check.
+
+    Copied from the real payload of incident
+    ae20c718-55b9-4fa3-9bd9-31b78f23495e: the repair paused at
+    user_approval offering a template_a/template_b diff and NO
+    preview_result, so there was nothing to validate a repair against.
+    """
+    return {
+        "id": "ia_msykxhrv1jq3htaiwn",
+        "status": "pending_answer",
+        "step": "user_approval",
+        "completed_steps": ["planner", "code_fixer", "step_preview_runner"],
+        "diff": {
+            "template_a": "collect(); return {tam_score: raw.tam}",
+            "template_b": "collect(); return {tam_score: normalize(raw.tam)}",
+        },
+    }
+
+
 def running() -> dict[str, Any]:
+    """An unrecognized in-progress status: polled, but never trusted as
+    evidence that a repair is in flight."""
     return {"status": "in_progress", "step": "analysing"}
+
+
+def provider_running() -> dict[str, Any]:
+    """The confirmed in-flight wire value, as a real production repair
+    reported it (incident ae20c718-55b9-4fa3-9bd9-31b78f23495e)."""
+    return {
+        "id": "ia_msykxhrv1jq3htaiwn",
+        "status": "running",
+        "step": "step_preview_runner",
+        "completed_steps": ["planner", "code_fixer", "step_preview_runner"],
+    }
 
 
 def done() -> dict[str, Any]:

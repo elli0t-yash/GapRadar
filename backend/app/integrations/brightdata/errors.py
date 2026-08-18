@@ -18,6 +18,17 @@ class BrightDataProviderUnavailableError(BrightDataError):
     """Raised on connection failures or a 5xx response from Bright Data."""
 
 
+class BrightDataNotFoundError(BrightDataError):
+    """Raised when Bright Data answers 404 for a resource.
+
+    Kept apart from the generic 4xx error because "this collector has no
+    self-healing job" and "the provider rejected the request" lead to
+    opposite decisions: the first means there is no repair to resume and
+    a new one may safely be triggered, while the second means we do not
+    know what is happening and must not trigger anything.
+    """
+
+
 class BrightDataInvalidResponseError(BrightDataError):
     """Raised when a response is not valid JSON or is missing/has
     unexpected required fields.

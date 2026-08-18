@@ -37,8 +37,10 @@ from tests.recallguard.healing_fakes import (
     HealClock,
     ScriptedProvider,
     awaiting_approval,
+    awaiting_approval_without_preview,
     done,
     failed,
+    provider_running,
     running,
 )
 
@@ -236,6 +238,11 @@ def test_a_candidate_whose_preview_violates_the_contract_is_rejected(
     assert provider.collection_triggers == []
     db_session.refresh(incident)
     assert incident.status is IncidentStatus.DEGRADED
+    # A rejection spends the attempt and nothing else: the diagnosis and
+    # the recommendation both survive, so attempt 2 may still be tried.
+    assert incident.classification is FailureClassification.EXTRACTION_DRIFT
+    assert incident.recommended_action is RecommendedAction.REQUEST_HEAL
+    assert incident.repair_attempts == 1
     assert incident.recovery_proof is None
 
 
@@ -276,27 +283,83 @@ def test_a_healthy_preview_is_approved_with_auto_save(
     assert provider.resume_bodies == [{"message": True, "auto_save": True}]
 
 
-def test_a_candidate_without_a_preview_is_never_blindly_approved(
+def test_a_candidate_without_a_preview_is_rejected_not_escalated(
     db_session: Session,
     collector: Collector,
     incident: ReliabilityIncident,
     brightdata_settings: Settings,
 ) -> None:
-    # Nothing to validate means no basis to approve. RecallGuard stops and
-    # leaves the provider's gate open for a human.
+    """The production failure this fix exists for.
+
+    Incident ae20c718-55b9-4fa3-9bd9-31b78f23495e reached user_approval
+    with a template_a/template_b diff and no preview_result. Nothing to
+    validate means no basis to approve -- but that is one bad candidate
+    on attempt 1 of 3, not a reason to wake a human. The gate is closed
+    with an explicit reject and the incident stays repairable.
+    """
+    provider = ScriptedProvider(progress=[awaiting_approval_without_preview()])
+
+    result = heal(db_session, provider, incident, collector, brightdata_settings)
+
+    assert result.outcome is HealingOutcome.CANDIDATE_REJECTED
+    assert result.candidate_approved is False
+    assert result.recovered is False
+    # Exactly one gate call, and it is a reject: never an approval.
+    assert provider.resume_bodies == [{"message": False, "auto_save": False}]
+    # Nothing was deployed, so there is nothing to verify.
+    assert provider.collection_triggers == []
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+    assert incident.classification is FailureClassification.EXTRACTION_DRIFT
+    assert incident.recommended_action is RecommendedAction.REQUEST_HEAL
+    assert incident.repair_attempts == 1
+    assert incident.recovery_proof is None
+
+
+def test_a_rejection_for_a_missing_preview_records_why(
+    db_session: Session,
+    collector: Collector,
+    incident: ReliabilityIncident,
+    brightdata_settings: Settings,
+) -> None:
+    """An operator must be able to read what was wrong with the candidate."""
+    provider = ScriptedProvider(progress=[awaiting_approval_without_preview()])
+
+    heal(db_session, provider, incident, collector, brightdata_settings)
+
+    db_session.refresh(incident)
+    failure = incident.evidence["events"][-1]
+    assert failure["event"] == "healing_failed"
+    assert failure["reason"] == "candidate_rejected"
+    assert "no preview_result" in failure["preflight_reason"]
+    assert failure["provider_rejected"] is True
+    # The diff alone is recorded as what the provider did offer.
+    assert failure["preflight"] == {"preview_records": 0, "has_diff": True}
+
+
+def test_a_missing_preview_never_reaches_approval_even_if_reject_fails(
+    db_session: Session,
+    collector: Collector,
+    incident: ReliabilityIncident,
+    brightdata_settings: Settings,
+) -> None:
+    """A provider that will not take the rejection still gets no approval."""
     provider = ScriptedProvider(
-        progress=[{"status": "pending_answer", "diff": "- a\n+ b"}]
+        progress=[awaiting_approval_without_preview()],
+        resume_response=httpx.Response(503, json={"error": "unavailable"}),
     )
 
     result = heal(db_session, provider, incident, collector, brightdata_settings)
 
-    assert result.outcome is HealingOutcome.ESCALATED
-    assert result.recovered is False
-    assert provider.resume_requests == []
+    assert result.outcome is HealingOutcome.CANDIDATE_REJECTED
+    assert result.candidate_approved is False
+    # One attempt to close the gate, and it was the reject.
+    assert provider.resume_bodies == [{"message": False, "auto_save": False}]
     assert provider.collection_triggers == []
     db_session.refresh(incident)
-    assert incident.status is IncidentStatus.MANUAL_REVIEW
-    assert incident.recommended_action is RecommendedAction.ESCALATE
+    assert incident.status is IncidentStatus.DEGRADED
+    assert incident.evidence["events"][-1]["provider_rejected"] is False
 
 
 # --- approval is not recovery ----------------------------------------------
@@ -364,13 +427,20 @@ def test_a_self_heal_job_that_fails_before_the_gate_never_approves(
     assert incident.repair_attempts == 1
 
 
-def test_a_local_self_heal_timeout_ends_the_attempt(
+def test_a_local_self_heal_timeout_is_not_a_provider_failure(
     db_session: Session,
     collector: Collector,
     incident: ReliabilityIncident,
     brightdata_settings: Settings,
 ) -> None:
-    provider = ScriptedProvider(progress=[running()])
+    """GapRadar stopped waiting. Bright Data did not fail.
+
+    Reporting this as PROVIDER_FAILED is what let a live repair be
+    mistaken for a dead one, so the two are now distinct outcomes. The
+    incident goes back to DEGRADED, which is exactly what makes the same
+    repair resumable on the next invocation.
+    """
+    provider = ScriptedProvider(progress=[provider_running()])
 
     result = heal(
         db_session,
@@ -381,8 +451,16 @@ def test_a_local_self_heal_timeout_ends_the_attempt(
         policy=SelfHealingPolicy(interval_seconds=2.0, timeout_seconds=6.0),
     )
 
-    assert result.outcome is HealingOutcome.PROVIDER_FAILED
+    assert result.outcome is HealingOutcome.LOCAL_TIMEOUT
+    assert result.provider_status is HealingStatus.RUNNING
+    assert result.recovered is False
     assert provider.resume_requests == []
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+    assert incident.repair_attempts == 1
+    timeout_event = incident.evidence["events"][-1]
+    assert timeout_event["reason"] == "local_polling_timeout"
+    assert timeout_event["provider_failed"] is False
     # The local budget is never handed to the provider.
     for request in provider.requests:
         assert "deadline" not in request.url.params
@@ -506,7 +584,63 @@ def test_a_failed_attempt_allows_another(
     assert second.recovered is True
 
 
-def test_three_attempts_are_allowed_and_the_fourth_escalates(
+@pytest.mark.parametrize("has_preview", [True, False])
+def test_rejection_escalates_only_once_the_budget_is_exhausted(
+    db_session: Session,
+    collector: Collector,
+    incident: ReliabilityIncident,
+    brightdata_settings: Settings,
+    healthy_records: list[dict[str, Any]],
+    has_preview: bool,
+) -> None:
+    """Three rejections, then a human -- and not one moment sooner.
+
+    Parametrized over both ways a candidate can fail preflight, because
+    an unvalidatable candidate and an invalid one are the same kind of
+    failure and must burn the budget at the same rate.
+    """
+    gate = (
+        awaiting_approval([broken_record(healthy_records, tam_score=60)])
+        if has_preview
+        else awaiting_approval_without_preview()
+    )
+
+    for attempt in range(1, MAX_AUTONOMOUS_REPAIR_ATTEMPTS):
+        provider = ScriptedProvider(progress=[gate])
+        result = heal(db_session, provider, incident, collector, brightdata_settings)
+
+        assert result.attempt == attempt
+        assert result.outcome is HealingOutcome.CANDIDATE_REJECTED
+        assert provider.resume_bodies == [{"message": False, "auto_save": False}]
+        db_session.refresh(incident)
+        # Still repairable: the incident is handed back for another try.
+        assert incident.status is IncidentStatus.DEGRADED
+        assert incident.recommended_action is RecommendedAction.REQUEST_HEAL
+
+    last = ScriptedProvider(progress=[gate])
+    result = heal(db_session, last, incident, collector, brightdata_settings)
+
+    assert result.attempt == MAX_AUTONOMOUS_REPAIR_ATTEMPTS
+    # The final candidate is still rejected at the provider before the
+    # incident is handed over -- the gate is never left hanging open.
+    assert last.resume_bodies == [{"message": False, "auto_save": False}]
+    assert result.outcome is HealingOutcome.ESCALATED
+    assert result.candidate_approved is False
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.MANUAL_REVIEW
+    assert incident.recommended_action is RecommendedAction.ESCALATE
+    assert incident.repair_attempts == MAX_AUTONOMOUS_REPAIR_ATTEMPTS
+
+    reasons = [
+        event["event"]
+        for event in incident.evidence["events"]
+        if event["event"] in {"healing_failed", "escalated_to_manual_review"}
+    ]
+    # The rejection is recorded before the escalation, not instead of it.
+    assert reasons[-2:] == ["healing_failed", "escalated_to_manual_review"]
+
+
+def test_a_fourth_attempt_never_reaches_bright_data(
     db_session: Session,
     collector: Collector,
     incident: ReliabilityIncident,
@@ -514,18 +648,19 @@ def test_three_attempts_are_allowed_and_the_fourth_escalates(
     healthy_records: list[dict[str, Any]],
 ) -> None:
     bad_preview = [broken_record(healthy_records, tam_score=60)]
-
-    for attempt in range(1, MAX_AUTONOMOUS_REPAIR_ATTEMPTS + 1):
-        provider = ScriptedProvider(progress=[awaiting_approval(bad_preview)])
-        result = heal(db_session, provider, incident, collector, brightdata_settings)
-        assert result.attempt == attempt
-        assert result.outcome is HealingOutcome.CANDIDATE_REJECTED
+    for _ in range(MAX_AUTONOMOUS_REPAIR_ATTEMPTS):
+        heal(
+            db_session,
+            ScriptedProvider(progress=[awaiting_approval(bad_preview)]),
+            incident,
+            collector,
+            brightdata_settings,
+        )
 
     fourth = ScriptedProvider(progress=[awaiting_approval(bad_preview)])
     result = heal(db_session, fourth, incident, collector, brightdata_settings)
 
     assert result.outcome is HealingOutcome.ESCALATED
-    # The fourth attempt never reaches Bright Data at all.
     assert fourth.requests == []
     db_session.refresh(incident)
     assert incident.status is IncidentStatus.MANUAL_REVIEW

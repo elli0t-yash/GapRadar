@@ -192,6 +192,23 @@ def active_incident(
     ).scalar()
 
 
+def collectors_with_active_incidents(session: Session) -> set[uuid.UUID]:
+    """Every collector that currently has an unresolved incident.
+
+    The set complement of "healthy". Exposed so downstream consumers can
+    exclude untrusted collectors in one query instead of restating what
+    counts as an active incident -- that definition stays here, where the
+    trust rules live.
+    """
+    return set(
+        session.execute(
+            select(ReliabilityIncident.collector_id)
+            .where(ReliabilityIncident.status.in_(_ACTIVE_STATUSES))
+            .distinct()
+        ).scalars()
+    )
+
+
 def collector_reliability_state(
     session: Session, *, collector_id: uuid.UUID
 ) -> ReliabilityState:
@@ -347,6 +364,85 @@ def start_healing(
     logger.info(
         "healing_started",
         extra={"incident_id": str(incident.id), "attempt": incident.repair_attempts},
+    )
+    return incident
+
+
+# Statuses a repair cycle can be re-entered from. DEGRADED covers the
+# normal case (a previous attempt ended and handed the incident back);
+# the in-flight statuses cover a process that died mid-attempt and left
+# the incident where it stood. MANUAL_REVIEW is deliberately absent: a
+# human owns that incident. RECOVERED is absent because it is closed.
+RESUMABLE_INCIDENT_STATUSES = frozenset(
+    {
+        IncidentStatus.DEGRADED,
+        IncidentStatus.HEALING,
+        IncidentStatus.VALIDATING,
+        IncidentStatus.VERIFYING,
+    }
+)
+
+
+def resume_healing(
+    session: Session,
+    incident: ReliabilityIncident,
+    *,
+    now: Callable[[], datetime] = _utcnow,
+) -> ReliabilityIncident:
+    """Re-enter an attempt that is already in flight at the provider.
+
+    The difference from start_healing is the whole point: this consumes
+    NO autonomous repair attempt and applies no attempt-budget check,
+    because nothing new is being started. Attempt 1 stays attempt 1 when
+    GapRadar stops waiting, the process exits, or the next cron run picks
+    the same repair back up.
+
+    That is only sound because the caller has already established, from
+    the provider itself, that a repair is genuinely still in flight --
+    which is why this refuses an incident that has never had an attempt:
+    with repair_attempts at zero there is nothing of ours to resume, and
+    adopting a repair GapRadar did not start would silently take
+    ownership of someone else's work.
+
+    Refused for MANUAL_REVIEW (a human owns it) and RECOVERED (closed),
+    and for a diagnosis that a scraper repair cannot address.
+    """
+    if incident.status not in RESUMABLE_INCIDENT_STATUSES:
+        raise IncidentTransitionError(
+            f"incident {incident.id} is {incident.status.value}; an in-flight "
+            "repair can only be resumed from degraded or an in-flight status"
+        )
+    if incident.recommended_action not in _REPAIRABLE_ACTIONS:
+        raise IncidentTransitionError(
+            f"incident {incident.id} recommends "
+            f"{incident.recommended_action.value}; healing is only appropriate "
+            "for a repairable extraction failure"
+        )
+    if incident.repair_attempts < 1:
+        raise IncidentTransitionError(
+            f"incident {incident.id} has no repair attempt to resume"
+        )
+
+    resumed_from = incident.status
+    incident.status = IncidentStatus.HEALING
+    incident.evidence = _record_event(
+        incident.evidence,
+        {
+            "event": "healing_resumed",
+            "at": now().isoformat(),
+            "attempt": incident.repair_attempts,
+            "resumed_from": resumed_from.value,
+        },
+    )
+    session.commit()
+    session.refresh(incident)
+    logger.info(
+        "healing_resumed",
+        extra={
+            "incident_id": str(incident.id),
+            "attempt": incident.repair_attempts,
+            "resumed_from": resumed_from.value,
+        },
     )
     return incident
 
