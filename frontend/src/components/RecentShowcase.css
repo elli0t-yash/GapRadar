@@ -1,0 +1,227 @@
+.recent-showcase {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.recent-showcase-intro {
+  flex-shrink: 0;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.recent-showcase-stars {
+  color: #ff6600;
+  font-size: var(--fs-lg);
+  letter-spacing: 2px;
+}
+
+.recent-showcase-intro h2 {
+  font-size: var(--fs-xl);
+  font-weight: 800;
+}
+
+.recent-showcase-intro p {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.recent-showcase-intro p strong {
+  color: var(--text-h);
+}
+
+.recent-showcase-arrows {
+  margin-top: var(--space-3);
+  display: flex;
+  gap: var(--space-2);
+}
+
+.recent-showcase-arrow {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.recent-showcase-arrow svg {
+  width: 16px;
+  height: 16px;
+}
+
+.recent-showcase-arrow-solid {
+  background: var(--text-h);
+  color: var(--bg-raised);
+}
+
+.recent-showcase-arrow-solid:hover:not(:disabled) {
+  background: var(--accent-text);
+}
+
+.recent-showcase-arrow:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.recent-showcase-scroller {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: var(--space-2) var(--space-1) var(--space-4);
+  scrollbar-width: none;
+}
+
+.recent-showcase-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.recent-showcase-card {
+  flex-shrink: 0;
+  width: 300px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  padding-bottom: var(--space-5);
+  border: none;
+  border-radius: 28px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  position: relative;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.recent-showcase-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.recent-showcase-card:focus-visible {
+  outline: 2px solid var(--text-h);
+  outline-offset: 2px;
+}
+
+.recent-showcase-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.recent-showcase-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 102, 0, 0.14);
+  color: #8a3a00;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.recent-showcase-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recent-showcase-name {
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: #8a3a00;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-showcase-role {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: rgba(138, 58, 0, 0.65);
+}
+
+.recent-showcase-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: #8a3a00;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.recent-showcase-pill {
+  position: absolute;
+  left: var(--space-4);
+  bottom: -18px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: #ffffff;
+  color: #8a3a00;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  padding: 8px var(--space-3);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
+}
+
+.stars {
+  color: #ff6600;
+  letter-spacing: 1px;
+  font-size: var(--fs-sm);
+}
+
+.tone-orange {
+  background: #ffe0cc;
+}
+
+.tone-deep {
+  background: #ff6600;
+}
+
+.tone-deep .recent-showcase-avatar {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.tone-deep .recent-showcase-name,
+.tone-deep .recent-showcase-title {
+  color: #ffffff;
+}
+
+.tone-deep .recent-showcase-role {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+@media (max-width: 760px) {
+  .recent-showcase {
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .recent-showcase-intro {
+    width: 100%;
+  }
+}
