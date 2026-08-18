@@ -32,6 +32,7 @@ from app.db.session import get_session_factory
 from app.domain.enums import CollectorStatus
 from app.integrations.brightdata.client import BrightDataClient
 from app.logging_config import configure_logging
+from app.pipeline.executor import resume_unfinished_pipeline_runs
 from app.pipeline.schemas import PipelineRunResult
 from app.pipeline.service import baseline_from_history, run_pipeline
 
@@ -68,6 +69,25 @@ def run_daily_pipeline(
     can exit non-zero. Nothing is retried here -- a rerun is the
     scheduler's decision, and the repair budget is RecallGuard's.
     """
+    # Anything a previous process left in flight is picked up first. The
+    # API's local executor is in-process and does not survive a restart,
+    # but the PipelineRun row and its Bright Data collection id do -- so
+    # this rejoins that same collection rather than abandoning it or
+    # starting a second one. It is deliberately before the fresh runs
+    # below: finishing work already paid for at the provider comes first.
+    try:
+        resumed = resume_unfinished_pipeline_runs(session, client)
+    # Reported, never hidden, and never allowed to stop the scheduled
+    # work: a stuck execution from yesterday must not cost today's runs.
+    except Exception:
+        logger.exception("daily_pipeline_resume_failed")
+    else:
+        if resumed:
+            logger.info(
+                "daily_pipeline_resumed",
+                extra={"pipeline_run_count": len(resumed)},
+            )
+
     results: list[PipelineRunResult] = []
     failures: list[tuple[Collector, Exception]] = []
 

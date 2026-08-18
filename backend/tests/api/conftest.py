@@ -6,6 +6,7 @@ and the frontend it stands in for never holds a provider credential
 either.
 """
 
+import uuid
 from collections.abc import Callable, Iterator
 
 import httpx
@@ -13,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.api.v1.deps import get_brightdata_client
+from app.api.v1.deps import get_brightdata_client, get_pipeline_scheduler
 from app.config import Settings
 from app.db.session import get_db
 from app.factory import create_app
@@ -32,6 +33,24 @@ def refuse_provider_calls(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Bright Data call: {request.url}")
 
 
+class RecordingScheduler:
+    """Stands in for the local background executor.
+
+    The real one opens its OWN session and Bright Data client, so it
+    would bypass the overrides below and reach the deployment's real
+    database and the real provider -- from a test, through
+    TestClient's synchronous BackgroundTasks. This records the claim
+    instead, which is also what makes "the request did not do the work"
+    an assertion rather than a hope.
+    """
+
+    def __init__(self) -> None:
+        self.scheduled: list[uuid.UUID] = []
+
+    def __call__(self, pipeline_run_id: uuid.UUID) -> None:
+        self.scheduled.append(pipeline_run_id)
+
+
 @pytest.fixture
 def brightdata_settings() -> Settings:
     return Settings(
@@ -44,8 +63,16 @@ def brightdata_settings() -> Settings:
 
 
 @pytest.fixture
+def scheduler() -> RecordingScheduler:
+    """The claims the API handed to the background executor."""
+    return RecordingScheduler()
+
+
+@pytest.fixture
 def make_api_client(
-    db_session: Session, brightdata_settings: Settings
+    db_session: Session,
+    brightdata_settings: Settings,
+    scheduler: RecordingScheduler,
 ) -> Iterator[Callable[..., TestClient]]:
     """Build a TestClient over a given provider handler."""
     clients: list[BrightDataClient] = []
@@ -60,6 +87,7 @@ def make_api_client(
         clients.append(provider)
         app.dependency_overrides[get_db] = lambda: db_session
         app.dependency_overrides[get_brightdata_client] = lambda: provider
+        app.dependency_overrides[get_pipeline_scheduler] = lambda: scheduler
         return TestClient(app)
 
     yield build

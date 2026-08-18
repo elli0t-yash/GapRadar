@@ -86,14 +86,130 @@ def run_fix_my_itch_collection(
     Raises a CollectionError subclass on any failure, always chained
     (`raise ... from`) to the original cause.
     """
-    started_at = now()
-    execution = _trigger(client, collector)
-    run = _open_run(session, collector, execution, started_at=started_at)
+    run = start_fix_my_itch_collection(session, client, collector=collector, now=now)
 
     try:
         _poll_until_complete(client, run, polling=polling, now=now, sleep=sleep)
+    except CollectionError as exc:
+        _finalize_failure(session, run, exc, completed_at=now())
+        raise
+    except Exception:
+        # As below: an unforeseen failure still closes the run out rather
+        # than leaving it stuck in RUNNING, and is re-raised untouched.
+        _finalize_failure(
+            session,
+            run,
+            CollectionError(
+                f"Unexpected failure while waiting for collection "
+                f"{run.external_run_id!r}",
+                collector_run_id=run.id,
+            ),
+            completed_at=now(),
+        )
+        raise
+
+    return _complete_collection(session, client, run=run, collector=collector, now=now)
+
+
+def start_fix_my_itch_collection(
+    session: Session,
+    client: BrightDataClient,
+    *,
+    collector: Collector,
+    now: Callable[[], datetime] = _utcnow,
+) -> CollectorRun:
+    """Trigger the collection and persist the run. Never waits.
+
+    Split out of run_fix_my_itch_collection so an asynchronous executor
+    can own the waiting itself. This is the ONLY function in the codebase
+    that asks Bright Data to start a collection, which is what makes the
+    "at most one active provider job per logical execution" invariant
+    checkable: a caller that already holds a provider job id must resume
+    it through advance_fix_my_itch_collection rather than call this again.
+
+    The returned run is already committed as RUNNING and carries the
+    provider's collection id, so an in-flight collection survives this
+    process exiting.
+    """
+    started_at = now()
+    execution = _trigger(client, collector)
+    return _open_run(session, collector, execution, started_at=started_at)
+
+
+def advance_fix_my_itch_collection(
+    session: Session,
+    client: BrightDataClient,
+    *,
+    run: CollectorRun,
+    collector: Collector,
+    now: Callable[[], datetime] = _utcnow,
+    on_stage: Callable[[str], None] | None = None,
+) -> CollectionRunResult | None:
+    """Move an already-triggered collection forward by one step. Never waits.
+
+    Asks the provider once for the status of the collection this run
+    already owns. No trigger request is made, so calling this repeatedly
+    -- after a crash, a restart, or a local timeout -- can never start a
+    second provider job for the same run.
+
+    Returns None while the provider is still working. That is not a
+    failure and nothing is finalized: the run stays RUNNING and the
+    caller may ask again later. Returns a CollectionRunResult once the
+    dataset has been fetched, validated, ingested and the run finalized.
+
+    `on_stage` is notified with the stage label a failure at that point
+    would carry ("collection", "source_validation", "ingestion"), so an
+    executor can persist which phase is in progress without this module
+    knowing anything about pipeline executions.
+    """
+    try:
+        execution = _check_status(client, run)
+        if execution.status is not CollectorRunStatus.SUCCEEDED:
+            logger.info(
+                "collection_still_running",
+                extra={
+                    "collector_run_id": str(run.id),
+                    "external_run_id": run.external_run_id,
+                    "provider_status": execution.status.value,
+                },
+            )
+            return None
+    except CollectionError as exc:
+        _finalize_failure(session, run, exc, completed_at=now())
+        raise
+
+    return _complete_collection(
+        session, client, run=run, collector=collector, now=now, on_stage=on_stage
+    )
+
+
+def _complete_collection(
+    session: Session,
+    client: BrightDataClient,
+    *,
+    run: CollectorRun,
+    collector: Collector,
+    now: Callable[[], datetime],
+    on_stage: Callable[[str], None] | None = None,
+) -> CollectionRunResult:
+    """Fetch, validate, ingest and finalize a collection known to be complete.
+
+    Shared by the blocking and the step-wise entrypoints so both close a
+    run out through exactly the same transaction boundaries: ingestion
+    stays uncommitted until the run is finalized SUCCEEDED in the same
+    transaction, and any failure rolls those pending signals away.
+    """
+
+    def stage(label: str) -> None:
+        if on_stage is not None:
+            on_stage(label)
+
+    try:
+        stage("collection")
         records = _fetch_dataset(client, run)
+        stage("source_validation")
         report = _validate(run, records, source_id=collector.source_id)
+        stage("ingestion")
         ingestion = _ingest(
             session, run, report, source_id=collector.source_id, observed_at=now()
         )
@@ -207,20 +323,7 @@ def _poll_until_complete(
 
     while True:
         polls += 1
-        try:
-            execution = client.get_collector_run_status(run.external_run_id)
-        except BrightDataInvalidResponseError as exc:
-            raise MalformedCollectionPayloadError(
-                f"Bright Data returned an unreadable status payload for "
-                f"collection {run.external_run_id!r}",
-                collector_run_id=run.id,
-            ) from exc
-        except BrightDataError as exc:
-            raise CollectionExecutionError(
-                f"Bright Data failed while collection {run.external_run_id!r} "
-                "was running",
-                collector_run_id=run.id,
-            ) from exc
+        execution = _check_status(client, run)
 
         if execution.status is CollectorRunStatus.SUCCEEDED:
             logger.info(
@@ -253,6 +356,30 @@ def _poll_until_complete(
                 polls=polls,
             )
         sleep(polling.interval_seconds)
+
+
+def _check_status(client: BrightDataClient, run: CollectorRun) -> CollectorExecution:
+    """Ask the provider once what this collection is doing.
+
+    One status request, no waiting and no retry. Both the blocking
+    polling loop and the step-wise executor go through here so a provider
+    error is translated into the same CollectionError either way -- the
+    distinction between "unreadable payload" and "provider failed" is
+    what lets RecallGuard diagnose extraction drift apart from an outage.
+    """
+    try:
+        return client.get_collector_run_status(run.external_run_id)
+    except BrightDataInvalidResponseError as exc:
+        raise MalformedCollectionPayloadError(
+            f"Bright Data returned an unreadable status payload for "
+            f"collection {run.external_run_id!r}",
+            collector_run_id=run.id,
+        ) from exc
+    except BrightDataError as exc:
+        raise CollectionExecutionError(
+            f"Bright Data failed while collection {run.external_run_id!r} was running",
+            collector_run_id=run.id,
+        ) from exc
 
 
 def _fetch_dataset(client: BrightDataClient, run: CollectorRun) -> list[dict[str, Any]]:

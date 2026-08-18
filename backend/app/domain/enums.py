@@ -22,6 +22,42 @@ class RunStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class PipelineRunStatus(str, enum.Enum):
+    """Lifecycle of ONE logical pipeline execution, persisted.
+
+    Deliberately separate from RunStatus and from ReliabilityState:
+
+    - RunStatus describes one provider collection execution. A logical
+      pipeline execution can span several of them (a detection run and
+      the independent verification run that proves a repair).
+    - ReliabilityState describes whether a collector's DATA can be
+      trusted. A pipeline execution sitting in WAITING_PROVIDER says
+      nothing about the trust of the dataset already collected: the
+      collector can be HEALTHY and a refresh can be mid-flight at the
+      same time, and conflating the two would make a refresh look like a
+      degradation.
+
+    QUEUED..VERIFYING are active; COMPLETED, DEGRADED and FAILED are
+    terminal.
+
+    DEGRADED and FAILED are different facts. DEGRADED means the execution
+    ran to completion and RecallGuard judged the result untrustworthy --
+    the system working. FAILED means the execution could not be carried
+    out at all (GapRadar crashed, or the provider job could not be
+    reached), which is an operational problem, not a trust verdict.
+    """
+
+    QUEUED = "queued"
+    COLLECTING = "collecting"
+    WAITING_PROVIDER = "waiting_provider"
+    VALIDATING = "validating"
+    INGESTING = "ingesting"
+    VERIFYING = "verifying"
+    COMPLETED = "completed"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+
+
 class SignalType(str, enum.Enum):
     COMPLAINT = "complaint"
     QUESTION = "question"

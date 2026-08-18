@@ -9,11 +9,12 @@ produced the data passed every check.
 
 import enum
 import uuid
+from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.collection.schemas import CollectionRunResult
-from app.domain.enums import ReliabilityState
+from app.domain.enums import PipelineRunStatus, ReliabilityState
 from app.recallguard.healing import HealingAttemptResult
 from app.recallguard.schemas import ReliabilityEvaluation
 
@@ -90,3 +91,58 @@ class PipelineRunResult(BaseModel):
     # Why no repair was attempted for a failing run. Present only when
     # healing was genuinely skipped, never as an excuse for a failure.
     healing_skipped_reason: str | None = None
+
+
+class PipelineRunAccepted(BaseModel):
+    """The 202 answer to "please refresh this collector".
+
+    Deliberately small. It reports that work is claimed, not what the
+    work found: no trust value, no reliability state, no record count,
+    because none of those exist yet and returning a placeholder for them
+    would be indistinguishable from a real verdict.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    pipeline_run_id: uuid.UUID
+    collector_id: uuid.UUID
+    status: PipelineRunStatus
+    # True when this request joined an execution that was already in
+    # flight instead of starting one. The caller asked for a refresh and
+    # a refresh is happening, so it is still a 202 -- but no second
+    # Bright Data job was triggered.
+    already_running: bool = False
+
+
+class PipelineRunRead(BaseModel):
+    """One logical pipeline execution, for polling.
+
+    `status` is where the EXECUTION is. `trusted` and `reliability_state`
+    are what RecallGuard concluded about the DATA, and are null until it
+    has concluded anything. A run sitting in WAITING_PROVIDER with
+    `trusted: null` is not a degraded collector -- the collector's
+    current trust lives on the reliability surface, and previously
+    trusted data stays served throughout.
+
+    No provider credential appears here. `provider_job_id` is Bright
+    Data's collection id, which is an identifier, not a secret.
+    """
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    pipeline_run_id: uuid.UUID = Field(validation_alias=AliasChoices("id"))
+    collector_id: uuid.UUID
+    status: PipelineRunStatus
+    # Null while active. Never false-by-default: "no verdict yet" and
+    # "judged untrustworthy" are different facts.
+    trusted: bool | None = None
+    provider_job_id: str | None = None
+    collector_run_id: uuid.UUID | None = None
+    reliability_state: ReliabilityState | None = None
+    incident_id: uuid.UUID | None = None
+    started_at: datetime | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
+    # Why the execution could not be carried out. Present only on FAILED;
+    # a DEGRADED execution ran fine and its explanation is the incident.
+    error: str | None = None

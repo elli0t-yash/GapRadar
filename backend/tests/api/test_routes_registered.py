@@ -3,6 +3,10 @@
 Guards against a route module being written but never included, and
 against a CRUD surface quietly appearing: the frontend reads, and writes
 only by asking the pipeline to run.
+
+Asking the pipeline to run is a claim, not the work: POST answers 202
+with an execution id and the client polls GET /pipeline/runs/{id}. There
+is deliberately no endpoint that mutates an execution or an incident.
 """
 
 from fastapi import FastAPI
@@ -22,6 +26,7 @@ EXPECTED_PATHS = {
     ("GET", "/api/v1/collectors"),
     ("GET", "/api/v1/collectors/{collector_id}/runs"),
     ("POST", "/api/v1/pipeline/run"),
+    ("GET", "/api/v1/pipeline/runs/{pipeline_run_id}"),
 }
 
 

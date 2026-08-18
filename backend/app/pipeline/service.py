@@ -168,13 +168,61 @@ def run_pipeline(
         collect=collect,
     )
 
+    return evaluate_and_heal(
+        session,
+        client,
+        collector=collector,
+        collection=collection,
+        failure=failure,
+        baseline=baseline,
+        reliability_policy=reliability_policy,
+        healing_policy=healing_policy,
+        collection_polling=collection_polling,
+        allow_healing=allow_healing,
+        now=now,
+        sleep=sleep,
+        evaluate=evaluate,
+        heal=heal,
+    )
+
+
+def evaluate_and_heal(
+    session: Session,
+    client: BrightDataClient,
+    *,
+    collector: Collector,
+    collection: CollectionRunResult | None,
+    failure: CollectionFailure | None,
+    collector_run_id: uuid.UUID | None = None,
+    baseline: BaselineProfile | None = None,
+    reliability_policy: ReliabilityPolicy = DEFAULT_POLICY,
+    healing_policy: SelfHealingPolicy = DEFAULT_SELF_HEALING_POLICY,
+    collection_polling: PollingPolicy = DEFAULT_POLLING_POLICY,
+    allow_healing: bool = True,
+    now: Callable[[], datetime] = _utcnow,
+    sleep: Callable[[float], None] = time.sleep,
+    evaluate: EvaluateFn = evaluate_collector_run,
+    heal: HealFn = resume_or_execute_healing_attempt,
+) -> PipelineRunResult:
+    """Judge a finished collection and repair it if RecallGuard says so.
+
+    Everything run_pipeline does after the collection itself, split out
+    so an asynchronous executor -- which owns the waiting and therefore
+    cannot call run_pipeline -- reaches the identical verdict through the
+    identical code rather than a second implementation of the same rules.
+    """
+    # `collector_run_id` is the fallback for a resumed execution whose
+    # collection finished in an earlier process: there is no result
+    # object to carry the id, but the run is on disk and must still be
+    # judged. Without it a resume would look like a trigger failure and
+    # report an unevaluable collection that actually succeeded.
     run_id = (
         collection.collector_run_id
         if collection
         else failure.collector_run_id
         if failure
         else None
-    )
+    ) or collector_run_id
     if run_id is None:
         # A trigger failure never receives a collection id, so no
         # CollectorRun exists to evaluate. Fail-closed: report the
