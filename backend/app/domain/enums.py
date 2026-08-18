@@ -58,6 +58,18 @@ class PipelineRunStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class ResearchSource(str, enum.Enum):
+    """Where a ResearchPaper came from.
+
+    One member today. It exists rather than a bare string so the value is
+    spelled in exactly one place and a second research source is a
+    deliberate, reviewable addition instead of a typo that silently
+    creates a parallel namespace.
+    """
+
+    ARXIV = "arxiv"
+
+
 class SignalType(str, enum.Enum):
     COMPLAINT = "complaint"
     QUESTION = "question"
