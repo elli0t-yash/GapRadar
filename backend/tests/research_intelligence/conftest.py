@@ -27,13 +27,26 @@ from tests.opportunity_engine.conftest import (
     make_source,
 )
 
-# The 15-record output Codex validated against the live arXiv collector.
-ARXIV_SAMPLE_FIXTURE = (
-    Path(__file__).resolve().parents[3]
-    / "external"
-    / "brightdata"
-    / "arxiv"
-    / "sample-results.json"
+# The validated collector output, owned by the Bright Data side and NOT
+# tracked in git. Two consequences this has to handle:
+#
+# - the path moves. It has already moved once (sample-results.json ->
+#   samples/dynamic-vehicle-routing.json) when the collector gained
+#   dynamic queries, so candidates are tried in order rather than one
+#   path being hardcoded;
+# - it can be absent entirely, in a fresh clone or in CI, because it is
+#   untracked. The fixture skips with a reason instead of erroring, so a
+#   missing collaborator artifact never reads as a backend regression.
+_ARXIV_ARTIFACTS = (
+    Path(__file__).resolve().parents[3] / "external" / "brightdata" / "arxiv"
+)
+_ARXIV_SAMPLE_CANDIDATES = (
+    _ARXIV_ARTIFACTS / "samples" / "dynamic-vehicle-routing.json",
+    _ARXIV_ARTIFACTS / "sample-results.json",
+)
+ARXIV_SAMPLE_FIXTURE = next(
+    (path for path in _ARXIV_SAMPLE_CANDIDATES if path.exists()),
+    _ARXIV_SAMPLE_CANDIDATES[0],
 )
 
 VALIDATED_QUERY = "dynamic vehicle routing"
@@ -41,7 +54,17 @@ VALIDATED_QUERY = "dynamic vehicle routing"
 
 @pytest.fixture(scope="session")
 def arxiv_records() -> list[dict[str, Any]]:
-    """The committed 15-record validation output, verbatim."""
+    """The validated collector output, verbatim.
+
+    Skipped rather than failed when the artifact is absent: it belongs to
+    the Bright Data side, is untracked, and its absence says nothing
+    about whether GapRadar's ingestion is correct.
+    """
+    if not ARXIV_SAMPLE_FIXTURE.exists():
+        pytest.skip(
+            f"Bright Data arXiv sample not present at {ARXIV_SAMPLE_FIXTURE}; "
+            "it is an untracked artifact owned by the collector side"
+        )
     return json.loads(ARXIV_SAMPLE_FIXTURE.read_text(encoding="utf-8"))
 
 

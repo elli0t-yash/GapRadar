@@ -12,6 +12,7 @@ from app.research_intelligence.query_generation import (
     QUERIES_PER_OPPORTUNITY,
     ConceptQueryGenerator,
     ResearchQueryGenerationError,
+    _repeats_a_token,
     normalize_query,
     select_queries,
     tokenize,
@@ -230,3 +231,91 @@ def test_a_single_recognised_term_still_yields_three_distinct_queries() -> None:
     assert len(plan.queries) == 3
     assert len(set(plan.queries)) == 3
     assert all("warehouse operations" in query for query in plan.queries)
+
+
+# -- degenerate queries -----------------------------------------------------
+# A domain term can collide with the method term appended to it, producing a
+# query that says the same thing twice. Found by auditing the real 133-item
+# trusted corpus, where it affected 27 opportunities (20%).
+
+
+def test_a_query_repeating_a_token_is_rejected() -> None:
+    """ "demand forecasting demand forecasting" is malformed, not narrower."""
+    selected = select_queries(
+        ["demand forecasting demand forecasting", "urban freight optimization"],
+        limit=3,
+    )
+
+    assert selected == ["urban freight optimization"]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "demand forecasting demand forecasting",
+        "process optimization optimization",
+        "food systems beverage systems",
+        "payment systems issues systems",
+    ],
+)
+def test_known_degenerate_shapes_are_detected(query: str) -> None:
+    assert _repeats_a_token(query) is True
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "urban freight optimization",
+        "vehicle routing demand forecasting",
+        "clinical workflow",
+    ],
+)
+def test_a_well_formed_query_is_not_treated_as_degenerate(query: str) -> None:
+    assert _repeats_a_token(query) is False
+
+
+def test_no_generated_plan_contains_a_degenerate_query() -> None:
+    """The end-to-end guarantee, over contexts that used to trigger it."""
+    contexts = [
+        MarketContext(
+            signal_id=uuid.uuid4(),
+            problem="Why can't small restaurants access wholesale ingredient pricing?",
+            description="Demand is unpredictable and capacity is wasted.",
+            industry="B2B Services",
+        ),
+        MarketContext(
+            signal_id=uuid.uuid4(),
+            problem="Why do payment apps have confusing cashback terms?",
+            description="Users cannot tell what they earned.",
+            industry="Payment Issues",
+        ),
+        MarketContext(
+            signal_id=uuid.uuid4(),
+            problem="Why can't hosts prepare restaurant-quality meals quickly?",
+            description="Home cooking takes too long.",
+            industry="Food & Beverage",
+        ),
+    ]
+
+    for context in contexts:
+        plan = ConceptQueryGenerator().generate(context)
+        assert len(plan.queries) == 3
+        for query in plan.queries:
+            tokens = query.split()
+            assert len(tokens) == len(set(tokens)), f"degenerate query: {query!r}"
+
+
+def test_a_domain_term_colliding_with_a_method_term_still_yields_three() -> None:
+    """Rejecting the degenerate pairing must not cost a query."""
+    context = MarketContext(
+        signal_id=uuid.uuid4(),
+        problem="Demand planning for warehouse capacity is manual",
+        description="Stock levels and demand are guessed.",
+        industry=None,
+    )
+
+    plan = ConceptQueryGenerator().generate(context)
+
+    assert "demand forecasting" in plan.concepts
+    assert len(plan.queries) == 3
+    assert len(set(plan.queries)) == 3

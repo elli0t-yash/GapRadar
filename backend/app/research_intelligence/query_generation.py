@@ -328,6 +328,18 @@ def normalize_query(query: str) -> str:
     return " ".join(query.lower().split())
 
 
+def _repeats_a_token(query: str) -> bool:
+    """Whether a query says the same word twice.
+
+    Produced when a domain term collides with the method term appended to
+    it -- "demand forecasting" + "demand forecasting", "process
+    optimization" + "optimization". The result is not a narrower search,
+    it is a malformed one, and it costs a real provider run.
+    """
+    tokens = query.split()
+    return len(tokens) != len(set(tokens))
+
+
 def _is_near_duplicate(candidate: str, accepted: list[str]) -> bool:
     """Whether `candidate` says the same thing as something already kept.
 
@@ -359,6 +371,8 @@ def select_queries(candidates: list[str], *, limit: int) -> list[str]:
     for candidate in candidates:
         normalized = normalize_query(candidate)
         if not normalized or len(normalized) > MAX_QUERY_LENGTH:
+            continue
+        if _repeats_a_token(normalized):
             continue
         if _is_near_duplicate(normalized, selected):
             continue
