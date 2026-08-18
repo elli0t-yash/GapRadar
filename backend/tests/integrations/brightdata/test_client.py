@@ -43,17 +43,30 @@ def test_trigger_collector_run_maps_valid_response(
     assert execution.provider_metadata == {"collection_id": "j_abc"}
 
 
-def test_get_collector_run_status_building(brightdata_settings: Settings) -> None:
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # The documented in-progress example...
+        {"status": "building"},
+        # ...and what a real production job actually returned.
+        {"status": "collecting", "message": "Job is not finished"},
+    ],
+)
+def test_get_collector_run_status_in_progress(
+    brightdata_settings: Settings, payload: dict
+) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/dca/dataset"
         assert request.url.params["id"] == "j_abc"
-        return httpx.Response(200, json={"status": "building"})
+        return httpx.Response(200, json=payload)
 
     with make_client(brightdata_settings, handler) as client:
         execution = client.get_collector_run_status("j_abc")
 
     assert execution.status is CollectorRunStatus.RUNNING
     assert execution.record_count is None
+    # The provider's own account of the wait is kept for debugging.
+    assert execution.provider_metadata == payload
 
 
 def test_get_collector_run_status_succeeded(brightdata_settings: Settings) -> None:
@@ -67,11 +80,24 @@ def test_get_collector_run_status_succeeded(brightdata_settings: Settings) -> No
     assert execution.record_count == 2
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"unexpected": "shape"},
+        # An unrecognized status is NOT assumed to mean "still running":
+        # polling forever on a state we do not understand would hide a
+        # real provider change.
+        {"status": "weird"},
+        {"status": "failed"},
+        {"status": None},
+        {},
+    ],
+)
 def test_get_collector_run_status_unexpected_shape_raises(
-    brightdata_settings: Settings,
+    brightdata_settings: Settings, payload: dict
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"unexpected": "shape"})
+        return httpx.Response(200, json=payload)
 
     with (
         make_client(brightdata_settings, handler) as client,

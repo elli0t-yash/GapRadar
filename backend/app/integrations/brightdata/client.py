@@ -24,6 +24,14 @@ from app.integrations.brightdata.schemas import (
 
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 
+# Status strings /dca/dataset has been observed to return while a run is
+# still in flight: "building" from the documented example, and
+# "collecting" (alongside {"message": "Job is not finished"}) from a real
+# production job. Both are enumerated deliberately -- an unrecognized
+# status still fails closed rather than being assumed to mean "running",
+# so a genuinely new provider state surfaces instead of polling forever.
+_IN_PROGRESS_STATUSES = frozenset({"building", "collecting"})
+
 # Path fragments confirmed via the official brightdata/cli source
 # (src/commands/scraper.ts). Collector-scoped; no separate healing/job ID
 # exists in the verified contract.
@@ -118,12 +126,17 @@ class BrightDataClient:
         """Poll a triggered run for status.
 
         Verified: GET /dca/dataset?id={external_run_id}
-        In-progress response: {"status": "building"}
+        In-progress response: a status object naming one of the observed
+        in-progress states -- {"status": "building"}, or
+        {"status": "collecting", "message": "Job is not finished"}, which
+        a real production job returned. Both mean the same thing to this
+        client: keep polling.
         Completed response: a JSON array of result rows -- there is no
         documented explicit "done"/"succeeded" status string; completion
         is inferred from the response being an array rather than a status
-        object. Any other shape raises BrightDataInvalidResponseError
-        rather than being guessed into a status.
+        object. Any other shape, including an unrecognized status string,
+        raises BrightDataInvalidResponseError rather than being guessed
+        into a status.
         """
         response = self._request("GET", "/dca/dataset", params={"id": external_run_id})
         data = self._parse_json(response)
@@ -135,7 +148,7 @@ class BrightDataClient:
                 record_count=len(data),
                 provider_metadata={},
             )
-        if isinstance(data, dict) and data.get("status") == "building":
+        if isinstance(data, dict) and data.get("status") in _IN_PROGRESS_STATUSES:
             return CollectorExecution(
                 external_run_id=external_run_id,
                 status=CollectorRunStatus.RUNNING,
@@ -144,8 +157,9 @@ class BrightDataClient:
             )
         raise BrightDataInvalidResponseError(
             "Unexpected /dca/dataset response shape while polling run "
-            f"status for {external_run_id!r}; expected a JSON array or "
-            '{"status": "building"}.'
+            f"status for {external_run_id!r}; expected a JSON array or an "
+            "object whose status is one of "
+            f"{sorted(_IN_PROGRESS_STATUSES)}."
         )
 
     def get_collector_output(self, external_run_id: str) -> CollectorOutput:
