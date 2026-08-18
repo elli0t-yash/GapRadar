@@ -9,7 +9,11 @@ The rules this module exists to enforce:
   and it never changes the run's own status to say so.
 - A repair can never declare itself successful, and an approved repair is
   not a recovered one. Only a fresh, independent collection started after
-  the repair, passing every check, moves an incident to RECOVERED.
+  the repair, passing every check, moves an incident to RECOVERED. A
+  provider OUTAGE is the one incident with no repair to wait for -- there
+  the retry itself is the fix -- but the evidence bar is identical: a
+  fresh independent run that executed successfully and passed every
+  check. See verify_retry_recovery.
 - Autonomous repair is capped. After three attempts the incident goes to
   MANUAL_REVIEW and a human decides.
 - Source data is never modified. Offending values are preserved verbatim
@@ -81,6 +85,23 @@ _LIFECYCLE_STATUSES = frozenset(
 # the scraper, so autonomous healing is refused for them.
 _REPAIRABLE_ACTIONS = frozenset({RecommendedAction.REQUEST_HEAL})
 
+# The one diagnosis a plain retry can prove, and the only pair that
+# verify_retry_recovery will act on.
+#
+# An OUTAGE means the provider could not execute the collection at all;
+# nothing about the scraper is implicated, which is why healing is
+# refused for it. But that refusal left such an incident with no way to
+# close: there is no repair to register, no candidate to validate, and
+# therefore no verification the healing lifecycle can ever reach. The
+# next successful independent collection IS the fix, and it is the only
+# proof this kind of incident can receive.
+#
+# EXTRACTION_DRIFT / REQUEST_HEAL is deliberately absent: a later clean
+# run does not prove a broken scraper was repaired, so drift keeps
+# requiring the full healing + verification lifecycle. INVESTIGATE and
+# MANUAL_REVIEW are absent for the same reason -- a human owns those.
+_RETRY_RECOVERABLE = (FailureClassification.OUTAGE, RecommendedAction.RETRY)
+
 # Bounded so an incident stays readable no matter how often a broken
 # collector runs.
 MAX_RECORDED_OCCURRENCES = 20
@@ -109,8 +130,11 @@ def evaluate_collector_run(
     SUCCEEDED, because the execution really did succeed.
 
     A failing run opens or updates the collector's single active
-    incident. A passing run does NOT close one: an incident is closed
-    only by verify_recovery, on the strength of a fresh independent run.
+    incident. A passing run does NOT close one: closing is always an
+    explicit, separately-judged act -- verify_recovery for a proven
+    scraper repair, verify_retry_recovery for a provider outage a later
+    retry disproved -- and each re-runs the checks itself rather than
+    taking this evaluation's word for it.
     """
     if run.status not in (RunStatus.SUCCEEDED, RunStatus.FAILED):
         raise NonTerminalRunError(
@@ -567,6 +591,109 @@ def verify_recovery(
             session, incident, verification_run, checks=checks, at=at
         )
     return _record_recovery(session, incident, verification_run, checks=checks, at=at)
+
+
+def verify_retry_recovery(
+    session: Session,
+    incident: ReliabilityIncident,
+    *,
+    retry_run: CollectorRun,
+    baseline: BaselineProfile | None = None,
+    policy: ReliabilityPolicy = DEFAULT_POLICY,
+    now: Callable[[], datetime] = _utcnow,
+) -> ReliabilityEvaluation | None:
+    """Close a provider OUTAGE that a later successful retry disproved.
+
+    Deliberately separate from verify_recovery rather than a relaxation
+    of it. verify_recovery anchors independence on a REGISTERED REPAIR
+    CANDIDATE -- the run must start after one exists -- which is the
+    invariant that stops a repair from verifying itself. An outage never
+    has a candidate, so making verify_recovery accept one without a
+    repair anchor would weaken that rule for the drift case too. This
+    function instead anchors on the detection of the outage.
+
+    Narrow by construction. It acts ONLY on an active DEGRADED incident
+    classified OUTAGE whose recommended action is RETRY, proven by a run
+    that belongs to the same collector, is not the detection run, started
+    after the incident was detected, executed SUCCEEDED, has never
+    verified this incident before, and passes every reliability check --
+    re-run here rather than taken on trust from the caller.
+
+    Anything else returns None and leaves the incident untouched: this is
+    the ordinary answer for a drift incident, an escalated incident, or a
+    run that does not qualify, not an error. Recovery, when it happens,
+    is recorded through the same _record_recovery used by a proven
+    repair, so the proof, the timeline event and the closed status follow
+    the conventions already in use.
+    """
+    if (incident.classification, incident.recommended_action) != _RETRY_RECOVERABLE:
+        return None
+    # DEGRADED only. RECOVERED is closed; MANUAL_REVIEW belongs to a
+    # human and is never taken back autonomously; the in-flight healing
+    # statuses are owned by the repair lifecycle, and an outage has no
+    # business being in one.
+    if incident.status is not IncidentStatus.DEGRADED:
+        return None
+    if not _qualifies_as_retry_proof(incident, retry_run):
+        return None
+
+    checks = evaluate_run_checks(retry_run, baseline=baseline, policy=policy)
+    if not all(check.passed for check in checks):
+        # Not proof of anything. The failure has already been recorded
+        # against this incident by evaluate_collector_run, so there is
+        # nothing to add here and certainly nothing to close.
+        return None
+
+    at = now()
+    # Recorded before the recovery event so the timeline says which path
+    # closed the incident: no repair was attempted, and repair_attempts
+    # stays at whatever it was (0 for an outage).
+    incident.evidence = _record_event(
+        incident.evidence,
+        {
+            "event": "retry_verification_started",
+            "at": at.isoformat(),
+            "collector_run_id": str(retry_run.id),
+        },
+    )
+    logger.info(
+        "retry_recovery_verified",
+        extra={
+            "incident_id": str(incident.id),
+            "collector_id": str(incident.collector_id),
+            "detection_run_id": str(incident.detection_run_id),
+            "verification_run_id": str(retry_run.id),
+        },
+    )
+    return _record_recovery(session, incident, retry_run, checks=checks, at=at)
+
+
+def _qualifies_as_retry_proof(
+    incident: ReliabilityIncident, retry_run: CollectorRun
+) -> bool:
+    """Whether this run can stand as proof that an outage is over.
+
+    The same independence rules _require_independent_run applies, minus
+    the repair-candidate anchor an outage never has and with detection
+    itself as the reference point instead. Returns a bool rather than
+    raising: the caller offers a run opportunistically on every passing
+    evaluation, so "not proof" is an expected answer, not a misuse.
+    """
+    if retry_run.collector_id != incident.collector_id:
+        return False
+    if retry_run.id == incident.detection_run_id:
+        return False
+    if retry_run.status is not RunStatus.SUCCEEDED:
+        return False
+    if str(retry_run.id) in _verification_run_ids(incident):
+        return False
+
+    started = _as_utc(retry_run.started_at or retry_run.created_at)
+    detected = _as_utc(incident.detected_at)
+    if started is None or detected is None:
+        # No usable ordering means no way to show this run is fresh.
+        return False
+    return started > detected
 
 
 def _require_independent_run(

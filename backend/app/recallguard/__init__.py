@@ -37,6 +37,7 @@ from app.recallguard.service import (
     resume_healing,
     start_healing,
     verify_recovery,
+    verify_retry_recovery,
 )
 
 __all__ = [
@@ -73,4 +74,5 @@ __all__ = [
     "resume_or_execute_healing_attempt",
     "start_healing",
     "verify_recovery",
+    "verify_retry_recovery",
 ]

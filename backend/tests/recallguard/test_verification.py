@@ -15,10 +15,12 @@ from app.recallguard.errors import VerificationRunRejectedError
 from app.recallguard.schemas import BaselineProfile
 from app.recallguard.service import (
     collector_reliability_state,
+    escalate,
     evaluate_collector_run,
     register_repair_candidate,
     start_healing,
     verify_recovery,
+    verify_retry_recovery,
 )
 from tests.recallguard.conftest import (
     DETECTED_AT,
@@ -30,6 +32,8 @@ from tests.recallguard.conftest import (
 BASELINE = BaselineProfile(label="synthetic", record_count=100)
 BEFORE_REPAIR = DETECTED_AT - timedelta(hours=1)
 AFTER_REPAIR = DETECTED_AT + timedelta(hours=1)
+BEFORE_OUTAGE = BEFORE_REPAIR
+AFTER_OUTAGE = AFTER_REPAIR
 
 
 @pytest.fixture
@@ -369,3 +373,282 @@ def test_a_new_failure_after_recovery_opens_a_separate_incident(
     assert evaluation.recommended_action is RecommendedAction.REQUEST_HEAL
     db_session.refresh(incident)
     assert incident.status is IncidentStatus.RECOVERED
+
+
+# --- retry recovery: closing an outage nothing can repair -------------------
+#
+# A provider OUTAGE is diagnosed RETRY and is deliberately kept out of the
+# scraper healer, so the healing lifecycle can never reach a verification
+# for it. verify_retry_recovery is the only path that closes one, and these
+# tests pin how narrow it is: the evidence bar is identical to a proven
+# repair, and every other kind of incident is left exactly where it was.
+
+
+def outage_incident(
+    session: Session, runs: RunBuilder, clock: FakeClock
+) -> ReliabilityIncident:
+    """A provider outage: degraded, with no repair to wait for."""
+    detection_run = runs.failed("timeout")
+    evaluation = evaluate_collector_run(
+        session, run=detection_run, baseline=BASELINE, now=clock
+    )
+    incident = session.get(ReliabilityIncident, evaluation.incident_id)
+    assert incident is not None
+    assert incident.classification is FailureClassification.OUTAGE
+    assert incident.recommended_action is RecommendedAction.RETRY
+    assert incident.status is IncidentStatus.DEGRADED
+    return incident
+
+
+def test_a_successful_retry_recovers_a_provider_outage(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    incident = outage_incident(db_session, runs, clock)
+    retry_run = runs.succeeded(record_count=100, started_at=AFTER_OUTAGE)
+
+    evaluation = verify_retry_recovery(
+        db_session, incident, retry_run=retry_run, baseline=BASELINE, now=clock
+    )
+
+    assert evaluation is not None
+    assert evaluation.passed is True
+    assert evaluation.state is ReliabilityState.HEALTHY
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.RECOVERED
+    assert incident.verification_run_id == retry_run.id
+    assert incident.recovered_at is not None
+    assert (
+        collector_reliability_state(db_session, collector_id=incident.collector_id)
+        is ReliabilityState.HEALTHY
+    )
+
+
+def test_retry_recovery_proves_itself_the_same_way_a_repair_does(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    """Same proof conventions, and honest about there having been no repair."""
+    incident = outage_incident(db_session, runs, clock)
+    detection_run_id = incident.detection_run_id
+    retry_run = runs.succeeded(record_count=100, started_at=AFTER_OUTAGE)
+
+    verify_retry_recovery(
+        db_session, incident, retry_run=retry_run, baseline=BASELINE, now=clock
+    )
+
+    db_session.refresh(incident)
+    proof = incident.recovery_proof
+    assert proof["result"] == "pass"
+    assert proof["detection_run_id"] == str(detection_run_id)
+    assert proof["verification_run_id"] == str(retry_run.id)
+    assert proof["classification"] == FailureClassification.OUTAGE.value
+    # No repair was attempted, and the proof does not pretend otherwise.
+    assert proof["repair_attempt"] == 0
+    assert incident.repair_attempts == 0
+    assert all(check["passed"] for check in proof["checks"])
+
+    events = [event["event"] for event in incident.evidence["events"]]
+    # The timeline says which path closed it, and never claims a repair.
+    assert events == ["retry_verification_started", "verification_passed"]
+
+
+def test_a_clean_run_does_not_close_an_extraction_drift_incident(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    """The invariant this whole path had to avoid weakening.
+
+    A later clean collection is no evidence that a broken scraper was
+    repaired, so drift keeps requiring the healing + verification
+    lifecycle.
+    """
+    detection_run = runs.succeeded(record_count=0)
+    evaluation = evaluate_collector_run(
+        db_session, run=detection_run, baseline=BASELINE, now=clock
+    )
+    incident = db_session.get(ReliabilityIncident, evaluation.incident_id)
+    assert incident is not None
+    assert incident.classification is FailureClassification.EXTRACTION_DRIFT
+    assert incident.recommended_action is RecommendedAction.REQUEST_HEAL
+
+    healthy = runs.succeeded(record_count=100, started_at=AFTER_REPAIR)
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=healthy, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+    assert incident.verification_run_id is None
+    assert incident.recovery_proof is None
+
+
+def test_an_escalated_incident_is_never_closed_by_a_retry(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    """MANUAL_REVIEW belongs to a human, whatever the next run does."""
+    incident = outage_incident(db_session, runs, clock)
+    escalate(db_session, incident, reason="operator asked for a look", now=clock)
+    retry_run = runs.succeeded(record_count=100, started_at=AFTER_OUTAGE)
+
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=retry_run, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.MANUAL_REVIEW
+
+
+def test_an_internal_failure_incident_is_never_closed_by_a_retry(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    """UNKNOWN / INVESTIGATE is GapRadar's own problem; a retry proves nothing."""
+    detection_run = runs.failed("ingestion")
+    evaluation = evaluate_collector_run(
+        db_session, run=detection_run, baseline=BASELINE, now=clock
+    )
+    incident = db_session.get(ReliabilityIncident, evaluation.incident_id)
+    assert incident is not None
+    assert incident.recommended_action is RecommendedAction.INVESTIGATE
+
+    retry_run = runs.succeeded(record_count=100, started_at=AFTER_OUTAGE)
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=retry_run, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+
+
+def test_a_failed_retry_does_not_close_the_outage(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    incident = outage_incident(db_session, runs, clock)
+    still_broken = runs.failed("timeout", started_at=AFTER_OUTAGE)
+
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=still_broken, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+
+
+def test_a_retry_that_fails_its_checks_does_not_close_the_outage(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    """SUCCEEDED is an execution fact, not proof the outage is over."""
+    incident = outage_incident(db_session, runs, clock)
+    empty = runs.succeeded(record_count=0, started_at=AFTER_OUTAGE)
+
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=empty, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+    assert incident.verification_run_id is None
+
+
+def test_the_detection_run_cannot_close_its_own_outage(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    incident = outage_incident(db_session, runs, clock)
+    detection_run = db_session.get(CollectorRun, incident.detection_run_id)
+    assert detection_run is not None
+
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=detection_run, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+
+
+def test_another_collectors_run_cannot_close_an_outage(
+    db_session: Session,
+    runs: RunBuilder,
+    other_collector: Collector,
+    clock: FakeClock,
+) -> None:
+    incident = outage_incident(db_session, runs, clock)
+    foreign = RunBuilder(db_session, other_collector).succeeded(
+        record_count=100, started_at=AFTER_OUTAGE
+    )
+
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=foreign, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+
+
+def test_a_run_that_predates_the_outage_cannot_close_it(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    """A collection from before the outage says nothing about it being over."""
+    incident = outage_incident(db_session, runs, clock)
+    stale = runs.succeeded(record_count=100, started_at=BEFORE_OUTAGE)
+
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=stale, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED
+
+
+def test_a_run_already_used_as_proof_cannot_be_reused(
+    db_session: Session, runs: RunBuilder, clock: FakeClock
+) -> None:
+    """Defensive: one collection cannot verify twice.
+
+    Not reachable through the outage path today -- recovery closes the
+    incident -- so the already-verified event is written directly, in the
+    shape RecallGuard itself records it.
+    """
+    incident = outage_incident(db_session, runs, clock)
+    retry_run = runs.succeeded(record_count=100, started_at=AFTER_OUTAGE)
+    incident.evidence = {
+        **(incident.evidence or {}),
+        "events": [
+            {
+                "event": "verification_passed",
+                "at": AFTER_OUTAGE.isoformat(),
+                "collector_run_id": str(retry_run.id),
+            }
+        ],
+    }
+    db_session.commit()
+
+    assert (
+        verify_retry_recovery(
+            db_session, incident, retry_run=retry_run, baseline=BASELINE, now=clock
+        )
+        is None
+    )
+
+    db_session.refresh(incident)
+    assert incident.status is IncidentStatus.DEGRADED

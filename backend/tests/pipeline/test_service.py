@@ -7,6 +7,7 @@ candidate is not a recovered incident, and no run these tests drive ever
 reaches the real provider.
 """
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -41,7 +42,12 @@ from app.recallguard.service import (
 )
 from tests.integrations.brightdata.conftest import make_client
 from tests.pipeline.conftest import RepairableProvider
-from tests.recallguard.conftest import FakeClock, RunBuilder, invalid_record
+from tests.recallguard.conftest import (
+    DETECTED_AT,
+    FakeClock,
+    RunBuilder,
+    invalid_record,
+)
 from tests.recallguard.healing_fakes import (
     HealClock,
     ScriptedProvider,
@@ -51,6 +57,7 @@ from tests.recallguard.healing_fakes import (
 )
 
 BASELINE = BaselineProfile(label="fix_my_itch_healthy_v1", record_count=5)
+AFTER_OUTAGE = DETECTED_AT + timedelta(hours=1)
 FAST_HEALING = SelfHealingPolicy(interval_seconds=1.0, timeout_seconds=60.0)
 FAST_COLLECTION = PollingPolicy(interval_seconds=1.0, timeout_seconds=60.0)
 
@@ -731,3 +738,129 @@ def test_the_pipeline_finishes_a_resumed_repair_it_did_not_start(
     assert incident.repair_attempts == 1
     assert incident.recovery_proof is not None
     assert incident.recovery_proof["repair_attempt"] == 1
+
+
+# -- an outage the next retry disproves --------------------------------------
+
+
+def test_successful_retry_recovers_provider_outage(
+    db_session: Session, collector: Collector, runs: RunBuilder
+) -> None:
+    """The gap this closes: an OUTAGE had no way to ever be closed.
+
+    Healing is refused for a provider outage -- correctly, since nothing
+    about the scraper is broken -- so the lifecycle that ends in RECOVERED
+    was unreachable for it. The incident stayed open, and an otherwise
+    perfect collection stayed untrusted forever. The next successful
+    independent retry now closes it, without the healer being involved.
+    """
+    clock = FakeClock()
+    healer = SpyHealer()
+    outage_run = runs.failed("timeout")
+
+    outage = run_pipeline(
+        db_session,
+        client=None,  # type: ignore[arg-type]
+        collector=collector,
+        baseline=BASELINE,
+        collect=collects(outage_run),
+        heal=healer,
+        now=clock,
+    )
+
+    assert outage.trusted is False
+    incident_id = outage.incident_id
+    assert incident_id is not None
+
+    # A genuinely fresh collection, started after the outage was detected.
+    retry_run = runs.succeeded(record_count=5, started_at=AFTER_OUTAGE)
+    result = run_pipeline(
+        db_session,
+        client=None,  # type: ignore[arg-type]
+        collector=collector,
+        baseline=BASELINE,
+        collect=collects(retry_run),
+        heal=healer,
+        now=clock,
+    )
+
+    # The healer was never asked to repair anything, on either run.
+    assert healer.calls == []
+    assert result.healing is None
+    assert result.healing_skipped_reason is None
+
+    incident = db_session.get(ReliabilityIncident, incident_id)
+    assert incident is not None
+    assert incident.status is IncidentStatus.RECOVERED
+    assert incident.verification_run_id == retry_run.id
+    assert incident.recovered_at is not None
+    # Closed by a retry, so no repair was attempted and none is claimed.
+    assert incident.repair_attempts == 0
+    assert incident.recovery_proof["result"] == "pass"
+    assert (
+        incident.recovery_proof["classification"] == FailureClassification.OUTAGE.value
+    )
+    assert incident.recovery_proof["verification_run_id"] == str(retry_run.id)
+
+    assert result.reliability_state is ReliabilityState.HEALTHY
+    assert result.trusted is True
+    assert result.trusted_collector_run_id == retry_run.id
+    assert result.collector_run_id == retry_run.id
+    assert result.incident_id == incident_id
+    # HEALTHY, not RECOVERED: RECOVERED is reserved for a proven repair,
+    # and no repair happened here.
+    assert result.outcome is PipelineOutcome.HEALTHY
+
+
+def test_a_clean_run_does_not_close_an_extraction_drift_incident(
+    db_session: Session, collector: Collector, runs: RunBuilder
+) -> None:
+    """The invariant the retry path must not weaken.
+
+    A later clean collection is not evidence that a broken scraper was
+    repaired -- the drift could simply not have been exercised this time.
+    Drift keeps requiring the healing + independent verification
+    lifecycle, so the incident stays open and nothing becomes trusted.
+    """
+    clock = FakeClock()
+    drifted = runs.source_validation_failed(
+        invalid_records=[invalid_record(tam_score=60)], fetched=5
+    )
+    detected = run_pipeline(
+        db_session,
+        client=None,  # type: ignore[arg-type]
+        collector=collector,
+        baseline=BASELINE,
+        collect=collects(drifted),
+        heal=SpyHealer(),
+        allow_healing=False,
+        now=clock,
+    )
+    incident_id = detected.incident_id
+    assert incident_id is not None
+
+    healer = SpyHealer()
+    clean = runs.succeeded(record_count=5, started_at=AFTER_OUTAGE)
+    result = run_pipeline(
+        db_session,
+        client=None,  # type: ignore[arg-type]
+        collector=collector,
+        baseline=BASELINE,
+        collect=collects(clean),
+        heal=healer,
+        now=clock,
+    )
+
+    incident = db_session.get(ReliabilityIncident, incident_id)
+    assert incident is not None
+    assert incident.classification is FailureClassification.EXTRACTION_DRIFT
+    assert incident.recommended_action is RecommendedAction.REQUEST_HEAL
+    assert incident.status is IncidentStatus.DEGRADED
+    assert incident.verification_run_id is None
+    assert incident.recovery_proof is None
+
+    assert result.reliability_state is ReliabilityState.DEGRADED
+    assert result.trusted is False
+    assert result.trusted_collector_run_id is None
+    # A passing run is not a repair request either: nothing to heal here.
+    assert healer.calls == []

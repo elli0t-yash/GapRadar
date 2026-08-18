@@ -22,6 +22,12 @@ object describing what happened:
 - A repair is requested only for a diagnosis that recommends one
   (REQUEST_HEAL). An outage, an internal ingestion failure, or an
   undiagnosed failure never reaches Bright Data's healer.
+- A passing run is offered to RecallGuard as possible proof that an open
+  provider OUTAGE is over -- the retry is the only fix such an incident
+  can have, and without this it would stay open forever, holding an
+  otherwise healthy collector untrusted. RecallGuard alone decides
+  whether the run qualifies; the healer is not involved, and extraction
+  drift is unaffected.
 - An incident escalated to a human is left exactly where it is. An
   incident whose recorded status still says a repair is in flight is NOT
   skipped, because that is exactly the state a timed-out or crashed
@@ -80,7 +86,11 @@ from app.recallguard.schemas import (
     ReliabilityEvaluation,
     ReliabilityPolicy,
 )
-from app.recallguard.service import collector_reliability_state, evaluate_collector_run
+from app.recallguard.service import (
+    collector_reliability_state,
+    evaluate_collector_run,
+    verify_retry_recovery,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +247,28 @@ def evaluate_and_heal(
     evaluation = evaluate(
         session, run=run, baseline=baseline, policy=reliability_policy, now=now
     )
+
+    if evaluation.passed and evaluation.incident_id is not None:
+        # A clean run does not close an incident on its own, and for
+        # extraction drift it must not: only the healing lifecycle can
+        # prove a broken scraper was repaired. The exception is a
+        # provider OUTAGE, which _healing_refusal keeps out of the healer
+        # precisely because there is nothing to repair -- so a successful
+        # independent retry is the only evidence it can ever produce.
+        # RecallGuard applies every eligibility rule and returns None if
+        # this run is not proof, leaving the incident exactly as it was.
+        incident = session.get(ReliabilityIncident, evaluation.incident_id)
+        if incident is not None:
+            recovered = verify_retry_recovery(
+                session,
+                incident,
+                retry_run=run,
+                baseline=baseline,
+                policy=reliability_policy,
+                now=now,
+            )
+            if recovered is not None:
+                evaluation = recovered
 
     healing: HealingAttemptResult | None = None
     skipped: str | None = None
