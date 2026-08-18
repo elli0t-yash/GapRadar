@@ -1,0 +1,47 @@
+name: Backend Sanity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - .github/workflows/backend.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - .github/workflows/backend.yml
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install backend dependencies
+        run: uv sync --dev --frozen
+
+      - name: Lint backend
+        run: uv run ruff check .
+
+      - name: Run backend tests
+        run: uv run pytest -q
+
+      - name: Build backend Docker image
+        run: docker build -t gapradar-backend-ci .
