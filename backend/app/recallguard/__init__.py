@@ -11,6 +11,7 @@ from app.recallguard.healing import (
     HealingOutcome,
     SelfHealingPolicy,
     execute_healing_attempt,
+    resume_or_execute_healing_attempt,
 )
 from app.recallguard.prompts import MAX_PROMPT_CHARS, build_heal_prompt
 from app.recallguard.schemas import (
@@ -24,13 +25,16 @@ from app.recallguard.schemas import (
 )
 from app.recallguard.service import (
     MAX_AUTONOMOUS_REPAIR_ATTEMPTS,
+    RESUMABLE_INCIDENT_STATUSES,
     active_incident,
     begin_validation,
     collector_reliability_state,
+    collectors_with_active_incidents,
     escalate,
     evaluate_collector_run,
     record_healing_failure,
     register_repair_candidate,
+    resume_healing,
     start_healing,
     verify_recovery,
 )
@@ -40,6 +44,7 @@ __all__ = [
     "DEFAULT_SELF_HEALING_POLICY",
     "MAX_AUTONOMOUS_REPAIR_ATTEMPTS",
     "MAX_PROMPT_CHARS",
+    "RESUMABLE_INCIDENT_STATUSES",
     "BaselineProfile",
     "CheckResult",
     "HealingAttemptResult",
@@ -57,12 +62,15 @@ __all__ = [
     "begin_validation",
     "build_heal_prompt",
     "collector_reliability_state",
+    "collectors_with_active_incidents",
     "escalate",
     "evaluate_collector_run",
     "execute_healing_attempt",
     "profile_from_records",
     "record_healing_failure",
     "register_repair_candidate",
+    "resume_healing",
+    "resume_or_execute_healing_attempt",
     "start_healing",
     "verify_recovery",
 ]

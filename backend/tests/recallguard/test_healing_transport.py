@@ -6,7 +6,11 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.integrations.brightdata.errors import BrightDataInvalidResponseError
+from app.integrations.brightdata.errors import (
+    BrightDataError,
+    BrightDataInvalidResponseError,
+    BrightDataNotFoundError,
+)
 from app.integrations.brightdata.schemas import HealingRequest, HealingStatus
 from tests.integrations.brightdata.conftest import make_client
 
@@ -53,6 +57,8 @@ def test_self_heal_requests_authenticate_without_leaking_the_token(
     ("payload", "expected"),
     [
         ({"status": "in_progress"}, HealingStatus.UNKNOWN),
+        # Confirmed against a real in-flight production repair.
+        ({"status": "running"}, HealingStatus.RUNNING),
         ({"status": "pending_answer"}, HealingStatus.AWAITING_APPROVAL),
         ({"status": "done"}, HealingStatus.DONE),
         ({"status": "failed"}, HealingStatus.FAILED),
@@ -137,3 +143,36 @@ def test_reject_sends_message_false_with_auto_save_false(
         client.reject_healing("c_123")
 
     assert bodies == [{"message": False, "auto_save": False}]
+
+
+def test_a_missing_self_healing_job_is_distinguishable_from_a_rejection(
+    brightdata_settings: Settings,
+) -> None:
+    """404 means "no repair exists here", not "the provider refused".
+
+    The two lead to opposite decisions: the first makes triggering a new
+    repair safe, the second means the provider's state is unknown and
+    nothing may be triggered at all.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": "not found"})
+
+    with (
+        make_client(brightdata_settings, handler) as client,
+        pytest.raises(BrightDataNotFoundError),
+    ):
+        client.get_healing_status("c_123")
+
+
+def test_other_client_errors_stay_generic(brightdata_settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "bad request"})
+
+    with (
+        make_client(brightdata_settings, handler) as client,
+        pytest.raises(BrightDataError) as caught,
+    ):
+        client.get_healing_status("c_123")
+
+    assert not isinstance(caught.value, BrightDataNotFoundError)

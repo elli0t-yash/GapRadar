@@ -5,7 +5,7 @@ actually observed -- which checks failed, what the contract requires, and
 which values violated it -- so the same incident always produces the same
 instruction, and every claim in it is traceable to a recorded fact.
 
-Two rules shape the wording:
+Three rules shape the wording:
 
 - Tell the scraper to extract what the page displays. The historical TAM
   bug produced values like 60 where the page shows a 1-10 score, and the
@@ -13,11 +13,21 @@ Two rules shape the wording:
   A prompt that says "rescale" would teach the scraper to fabricate.
 - Keep the output schema. A repair that renames or drops fields breaks
   every downstream contract even if the values are right.
+- Describe the failure that is open NOW, not the one that opened the
+  incident. An incident outlives its first symptom: a repair can fix the
+  values it was asked about and break coverage doing it, and the next
+  prompt has to be about the breakage, not about the values that are now
+  correct. Which is exactly what happened -- a repair that fixed tam_score
+  also shipped `categories.slice(0, 1)`, so the next collection returned
+  one category's worth of records and the stale prompt would have asked
+  for the tam_score fix a second time.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic.fields import FieldInfo
 
 from app.db.models import ReliabilityIncident
 from app.integrations.brightdata.fix_my_itch import (
@@ -40,6 +50,20 @@ _CONTRACT_RULES = (
     "Keep the existing output schema and field names unchanged."
 )
 
+# Said whenever completeness failed, in whatever way. Deliberately
+# generic: it names no category, no count, and no site structure, because
+# the same mistake -- a repair that leaves a preview-sized sample in the
+# production path -- is not specific to the one that caused it.
+_COVERAGE_RULES = (
+    "Restore full category traversal and collection coverage. "
+    "Do not restrict production collection to a preview subset or first "
+    "category."
+)
+
+# The check whose failure means "too little data", as recorded in
+# evidence by app.recallguard.detection.check_completeness.
+_COMPLETENESS_CHECK = "completeness"
+
 
 def build_heal_prompt(
     incident: ReliabilityIncident, *, source_url: str = FIX_MY_ITCH_SOURCE_URL
@@ -51,45 +75,184 @@ def build_heal_prompt(
     Contains no credentials, no environment values, and no raw dataset --
     only bounded, already-public field values that failed validation.
     """
-    occurrence = _latest_occurrence(incident)
+    failure = _latest_failure(incident)
     sections = [
         f"The scraper for {source_url} is returning data that fails its contract.",
         f"Diagnosis: {incident.classification.value}.",
     ]
 
-    failures = _failed_checks(occurrence)
-    if failures:
+    if failure.failed_checks:
         sections.append("Failed checks:")
         sections.extend(
             f"- {check['name']}: expected {check['expected']}; observed "
             f"{check['observed']}"
-            for check in failures[:MAX_REPORTED_CHECKS]
+            for check in failure.failed_checks[:MAX_REPORTED_CHECKS]
         )
 
-    violations = _field_violations(occurrence)
+    violations = _field_violations(failure.sample_violations)
     if violations:
         sections.append("Wrong values returned:")
         sections.extend(f"- {line}" for line in violations[:MAX_REPORTED_VIOLATIONS])
+
+    if _completeness_failed(failure.failed_checks):
+        sections.append(f"Coverage: {_COVERAGE_RULES}")
+        if not violations:
+            # Too few records, but every record that did arrive was
+            # valid. Saying so stops the repair from "fixing" extraction
+            # that is already correct -- the exact regression that
+            # produced this state, in reverse.
+            preserved = _preserved_value_rule()
+            if preserved:
+                sections.append(preserved)
 
     sections.append(f"Required: {_CONTRACT_RULES}")
     return _fit("\n".join(sections))
 
 
-def _latest_occurrence(incident: ReliabilityIncident) -> dict[str, Any]:
-    occurrences = (incident.evidence or {}).get("occurrences") or []
-    return occurrences[-1] if isinstance(occurrences[-1:], list) and occurrences else {}
+class _FailureEvidence(BaseModel):
+    """One recorded failure, whatever shape it was recorded in.
+
+    RecallGuard writes failures in two places and two shapes: a detection
+    failure becomes an entry in evidence["occurrences"] carrying every
+    check with a `passed` flag, while a post-repair verification failure
+    becomes a "verification_failed" entry in evidence["events"] carrying
+    only the checks that failed. Normalizing both to this makes the
+    prompt builder indifferent to which one is newer, which is the whole
+    point -- the newest failure is the one worth repairing.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    at: datetime | None = None
+    failed_checks: list[dict[str, Any]] = Field(default_factory=list)
+    sample_violations: list[dict[str, Any]] = Field(default_factory=list)
 
 
-def _failed_checks(occurrence: dict[str, Any]) -> list[dict[str, Any]]:
-    checks = occurrence.get("checks") or []
-    return [
-        check
-        for check in checks
-        if isinstance(check, dict) and check.get("passed") is False
+def _latest_failure(incident: ReliabilityIncident) -> _FailureEvidence:
+    """The most recent unresolved failure, from either evidence stream.
+
+    Ties and unreadable timestamps fall back to the occurrence, which is
+    the historical behavior: a verification failure only wins when it can
+    prove it is strictly newer.
+    """
+    evidence = incident.evidence or {}
+    occurrence = _latest_occurrence(evidence)
+    verification = _latest_verification_failure(evidence)
+
+    if verification is None:
+        return occurrence
+    if occurrence.at is None or verification.at is None:
+        return verification if occurrence.at is None else occurrence
+    return verification if verification.at > occurrence.at else occurrence
+
+
+def _latest_occurrence(evidence: dict[str, Any]) -> _FailureEvidence:
+    occurrences = [
+        entry
+        for entry in (evidence.get("occurrences") or [])
+        if isinstance(entry, dict)
     ]
+    if not occurrences:
+        return _FailureEvidence()
+    latest = occurrences[-1]
+    return _FailureEvidence(
+        at=_parse_at(latest.get("detected_at")),
+        failed_checks=[
+            check
+            for check in (latest.get("checks") or [])
+            if isinstance(check, dict) and check.get("passed") is False
+        ],
+        sample_violations=[
+            violation
+            for violation in (latest.get("sample_violations") or [])
+            if isinstance(violation, dict)
+        ],
+    )
 
 
-def _field_violations(occurrence: dict[str, Any]) -> list[str]:
+def _latest_verification_failure(evidence: dict[str, Any]) -> _FailureEvidence | None:
+    """The last time a repair was disproved by a fresh production run.
+
+    Read from the lifecycle event log rather than the occurrence list
+    because verification failures are recorded there -- they judge a run
+    that was collected to test a repair, not a run that opened an
+    incident.
+    """
+    events = [
+        entry
+        for entry in (evidence.get("events") or [])
+        if isinstance(entry, dict) and entry.get("event") == "verification_failed"
+    ]
+    if not events:
+        return None
+    latest = events[-1]
+    return _FailureEvidence(
+        at=_parse_at(latest.get("at")),
+        # Already filtered to failures when written; no `passed` flag to
+        # filter on here.
+        failed_checks=[
+            check
+            for check in (latest.get("failed_checks") or [])
+            if isinstance(check, dict)
+        ],
+        sample_violations=[
+            violation
+            for violation in (latest.get("sample_violations") or [])
+            if isinstance(violation, dict)
+        ],
+    )
+
+
+def _parse_at(value: Any) -> datetime | None:
+    """Read a recorded timestamp, treating a naive one as UTC.
+
+    Everything RecallGuard writes is timezone-aware, but a naive value
+    must not make two failures incomparable -- that would silently fall
+    back to the stale one.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _completeness_failed(failed_checks: list[dict[str, Any]]) -> bool:
+    return any(check.get("name") == _COMPLETENESS_CHECK for check in failed_checks)
+
+
+def _preserved_value_rule() -> str | None:
+    """State the numeric contract the current extraction is already meeting.
+
+    Read off the source model, so the ranges quoted are the contract
+    itself. Nothing about the current production volume or the site's
+    category list appears here -- those are observations that move, and a
+    prompt that hardcoded them would go stale the moment the source grew.
+    """
+    groups: dict[tuple[Any, Any], list[str]] = {}
+    for name, field in FixMyItchRecord.model_fields.items():
+        bounds = _numeric_bounds(field)
+        if bounds is not None:
+            groups.setdefault(bounds, []).append(name)
+    if not groups:
+        return None
+    ranges = "; ".join(
+        f"{', '.join(names)} {low}-{high}" for (low, high), names in groups.items()
+    )
+    return f"Preserve the current valid extraction: {ranges}."
+
+
+def _numeric_bounds(field: FieldInfo) -> tuple[Any, Any] | None:
+    low = high = None
+    for constraint in field.metadata:
+        low = getattr(constraint, "ge", None) if low is None else low
+        high = getattr(constraint, "le", None) if high is None else high
+    return (low, high) if low is not None and high is not None else None
+
+
+def _field_violations(sample_violations: list[dict[str, Any]]) -> list[str]:
     """Name the offending fields and their actual values.
 
     Derived by re-validating each preserved record against the source
@@ -98,7 +261,7 @@ def _field_violations(occurrence: dict[str, Any]) -> list[str]:
     """
     lines: list[str] = []
     seen: set[str] = set()
-    for violation in occurrence.get("sample_violations") or []:
+    for violation in sample_violations:
         raw = violation.get("raw") if isinstance(violation, dict) else None
         if not isinstance(raw, dict):
             continue

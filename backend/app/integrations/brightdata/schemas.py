@@ -64,14 +64,20 @@ class HealingStatus(str, enum.Enum):
       which request it made does (see BrightDataClient.reject_healing).
     - FAILED maps from raw "failed", "error", or "cancelled" (grouped
       together, matching the CLI's own TERMINAL_FAIL_STATUSES grouping).
-    - UNKNOWN covers any other status string. There is no confirmed
-      "still running" wire value in the documentation or CLI source --
-      the CLI infers "keep polling" for anything unrecognized, but that
-      inference is specific to its own polling loop, so this client does
-      not repeat it as fact. UNKNOWN is a safe, forward-compatible
-      fallback rather than a rejection of an unrecognized value.
+    - RUNNING maps from raw "running", observed on a real in-flight
+      production repair. It means the provider is actively working, which
+      is the one thing that must never be confused with UNKNOWN: a repair
+      known to be running may be resumed, and must never have a second
+      repair triggered on top of it.
+    - UNKNOWN covers any other status string. The CLI infers "keep
+      polling" for anything unrecognized, but that inference is specific
+      to its own polling loop, so this client does not repeat it as
+      fact. UNKNOWN is a safe, forward-compatible fallback rather than a
+      rejection of an unrecognized value -- and callers deciding whether
+      to start new provider work must fail closed on it.
     """
 
+    RUNNING = "running"
     AWAITING_APPROVAL = "awaiting_approval"
     DONE = "done"
     FAILED = "failed"

@@ -10,6 +10,7 @@ from app.integrations.brightdata.errors import (
     BrightDataError,
     BrightDataInvalidResponseError,
     BrightDataMalformedDatasetError,
+    BrightDataNotFoundError,
     BrightDataProviderUnavailableError,
     BrightDataTimeoutError,
 )
@@ -59,6 +60,15 @@ _RESUME_JOB_PATH = "resume_automation_job"
 _RAW_STATUS_DONE = "done"
 _RAW_STATUS_TERMINAL_FAILURES = frozenset({"failed", "error", "cancelled"})
 _RAW_STATUS_AWAITING_APPROVAL = "pending_answer"
+# Observed on a real in-flight production repair (incident
+# ae20c718-55b9-4fa3-9bd9-31b78f23495e, collector c_msya3ha629w2q9c62m),
+# whose progress response was {"id": "ia_...", "step":
+# "step_preview_runner", "completed_steps": [...], "status": "running"}.
+# The reference CLI does not branch on this value -- it polls anything it
+# does not recognize -- but the wire value itself is confirmed, and
+# telling "still working" apart from "we cannot tell" is what stops a
+# second repair being triggered on top of a live one.
+_RAW_STATUS_RUNNING = "running"
 
 
 class BrightDataClient:
@@ -357,7 +367,9 @@ class BrightDataClient:
         self, collector_id: str, data: dict[str, Any]
     ) -> HealingCandidate:
         raw_status = data["status"]
-        if raw_status == _RAW_STATUS_AWAITING_APPROVAL:
+        if raw_status == _RAW_STATUS_RUNNING:
+            status = HealingStatus.RUNNING
+        elif raw_status == _RAW_STATUS_AWAITING_APPROVAL:
             status = HealingStatus.AWAITING_APPROVAL
         elif raw_status == _RAW_STATUS_DONE:
             status = HealingStatus.DONE
@@ -404,6 +416,10 @@ class BrightDataClient:
         if response.status_code >= 500:
             raise BrightDataProviderUnavailableError(
                 f"Bright Data returned {response.status_code} for {method} {path}"
+            )
+        if response.status_code == 404:
+            raise BrightDataNotFoundError(
+                f"Bright Data returned 404 for {method} {path}"
             )
         if response.status_code >= 400:
             raise BrightDataError(
