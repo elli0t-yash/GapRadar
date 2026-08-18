@@ -9,6 +9,7 @@ from app.integrations.brightdata.errors import (
     BrightDataAuthenticationError,
     BrightDataError,
     BrightDataInvalidResponseError,
+    BrightDataMalformedDatasetError,
     BrightDataProviderUnavailableError,
     BrightDataTimeoutError,
 )
@@ -156,6 +157,12 @@ class BrightDataClient:
         Raises BrightDataInvalidResponseError if the response is not a
         JSON array -- callers should poll get_collector_run_status until
         SUCCEEDED before calling this.
+
+        Every row must be a JSON object. A row of any other shape raises
+        BrightDataMalformedDatasetError naming the offending index: a
+        malformed row is never dropped, because silently returning the
+        surviving rows would present a corrupted dataset as a merely
+        smaller one.
         """
         response = self._request("GET", "/dca/dataset", params={"id": external_run_id})
         data = self._parse_json(response)
@@ -167,10 +174,17 @@ class BrightDataClient:
                 "get_collector_run_status until status is SUCCEEDED before "
                 "calling get_collector_output."
             )
-        records = [record for record in data if isinstance(record, dict)]
+        for index, record in enumerate(data):
+            if not isinstance(record, dict):
+                raise BrightDataMalformedDatasetError(
+                    f"Dataset row {index} of collection {external_run_id!r} "
+                    f"is a {type(record).__name__}, expected a JSON object",
+                    index=index,
+                    value_type=type(record).__name__,
+                )
         return CollectorOutput(
             external_run_id=external_run_id,
-            records=records,
+            records=data,
             provider_metadata={},
         )
 

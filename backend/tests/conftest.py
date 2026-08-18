@@ -1,8 +1,9 @@
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Connection, Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -25,6 +26,29 @@ def client(settings: Settings) -> TestClient:
     return TestClient(app)
 
 
+def _enable_sqlite_transaction_support(engine: Engine) -> None:
+    """Make SQLite honor transactions, rollbacks, and SAVEPOINTs.
+
+    The pysqlite driver opens connections in its own legacy autocommit
+    mode and emits BEGIN only for some statements, which breaks SAVEPOINT
+    and lets flushed rows survive a Session.rollback(). Without this,
+    tests asserting transactional behavior (atomic ingestion, savepoint
+    isolation of a duplicate insert) would pass or fail for reasons
+    unrelated to the code under test.
+
+    This is SQLAlchemy's documented workaround: disable the driver's
+    implicit BEGIN and emit it explicitly instead.
+    """
+
+    @event.listens_for(engine, "connect")
+    def disable_pysqlite_implicit_begin(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def emit_explicit_begin(connection: Connection) -> None:
+        connection.exec_driver_sql("BEGIN")
+
+
 @pytest.fixture
 def engine() -> Iterator[Engine]:
     # SQLite in-memory is used for fast unit tests only. It cannot fully
@@ -38,6 +62,7 @@ def engine() -> Iterator[Engine]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    _enable_sqlite_transaction_support(test_engine)
     Base.metadata.create_all(test_engine)
     yield test_engine
     Base.metadata.drop_all(test_engine)

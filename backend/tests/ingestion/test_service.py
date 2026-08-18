@@ -286,3 +286,80 @@ def test_ingest_does_not_promote_trust_or_call_downstream_systems(
     assert signal is not None
     assert not hasattr(signal, "trusted")
     assert not hasattr(signal, "is_trusted")
+
+
+def test_default_call_commits_the_batch(
+    db_session: Session, source: Source, collector_run: CollectorRun
+) -> None:
+    # Backwards compatibility: callers that pass no `commit` argument keep
+    # getting a committed batch, exactly as before.
+    result = ingest_collector_output(
+        db_session,
+        source_id=source.id,
+        collector_run_id=collector_run.id,
+        records=[make_raw_record()],
+    )
+
+    db_session.rollback()
+
+    assert result.accepted == 1
+    assert db_session.get(Signal, result.persisted_signal_ids[0]) is not None
+
+
+def test_commit_false_leaves_the_batch_pending(
+    db_session: Session, source: Source, collector_run: CollectorRun
+) -> None:
+    # The caller owns the transaction and can still see its own writes...
+    result = ingest_collector_output(
+        db_session,
+        source_id=source.id,
+        collector_run_id=collector_run.id,
+        records=[make_raw_record()],
+        commit=False,
+    )
+    assert result.accepted == 1
+    assert db_session.get(Signal, result.persisted_signal_ids[0]) is not None
+
+    # ...but nothing is durable until that caller commits.
+    db_session.rollback()
+
+    assert db_session.execute(select(Signal)).scalars().all() == []
+
+
+def test_commit_false_still_reports_rejections_and_duplicates(
+    db_session: Session, source: Source, collector_run: CollectorRun
+) -> None:
+    result = ingest_collector_output(
+        db_session,
+        source_id=source.id,
+        collector_run_id=collector_run.id,
+        records=[
+            make_raw_record(),
+            make_raw_record(),
+            make_raw_record(external_id="post-2", title="   "),
+        ],
+        commit=False,
+    )
+
+    assert result.accepted == 1
+    assert result.duplicates == 1
+    assert [rejected.reason for rejected in result.rejected] == [
+        RejectionReason.MISSING_REQUIRED_FIELD
+    ]
+
+
+def test_commit_false_batch_can_be_committed_by_the_caller(
+    db_session: Session, source: Source, collector_run: CollectorRun
+) -> None:
+    result = ingest_collector_output(
+        db_session,
+        source_id=source.id,
+        collector_run_id=collector_run.id,
+        records=[make_raw_record()],
+        commit=False,
+    )
+
+    db_session.commit()
+    db_session.rollback()
+
+    assert db_session.get(Signal, result.persisted_signal_ids[0]) is not None

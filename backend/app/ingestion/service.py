@@ -19,6 +19,7 @@ def ingest_collector_output(
     source_id: uuid.UUID,
     collector_run_id: uuid.UUID,
     records: list[RawProviderRecord],
+    commit: bool = True,
 ) -> IngestionResult:
     """Validate, normalize, deduplicate, and persist Bright Data collector
     output as Signal rows.
@@ -36,8 +37,22 @@ def ingest_collector_output(
     concurrent writer or a duplicate this function's own pre-check missed
     -- raises and is caught for that record alone, without poisoning the
     outer transaction or forcing already-accepted records in this same
-    call to be rolled back. Exactly one outer commit happens at the end,
-    covering the whole batch.
+    call to be rolled back.
+
+    `commit` controls the outer transaction boundary only:
+
+    - commit=True (default, and every historical caller's behavior):
+      exactly one outer commit happens at the end, covering the batch.
+    - commit=False: the accepted rows are flushed but left uncommitted,
+      so the caller can extend the transaction across further work and
+      commit -- or roll back -- the whole thing as one unit. A caller
+      that passes commit=False owns the transaction and MUST commit or
+      roll back; nothing is durable until it does.
+
+    Deduplication is unaffected either way: the in-batch check, the
+    SELECT pre-check, and the database's unique constraint all operate
+    within the session's transaction and see this batch's own pending
+    inserts after each flush.
     """
     accepted = 0
     duplicates = 0
@@ -108,7 +123,8 @@ def ingest_collector_output(
         accepted += 1
         persisted_signal_ids.append(signal.id)
 
-    session.commit()
+    if commit:
+        session.commit()
 
     return IngestionResult(
         accepted=accepted,

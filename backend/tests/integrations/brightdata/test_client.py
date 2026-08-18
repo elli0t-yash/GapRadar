@@ -7,6 +7,7 @@ from app.config import Settings
 from app.integrations.brightdata.errors import (
     BrightDataAuthenticationError,
     BrightDataInvalidResponseError,
+    BrightDataMalformedDatasetError,
     BrightDataProviderUnavailableError,
     BrightDataTimeoutError,
 )
@@ -21,6 +22,13 @@ def test_trigger_collector_run_maps_valid_response(
         assert request.url.path == "/dca/trigger"
         assert request.url.params["collector"] == "c_123"
         assert request.url.params["queue_next"] == "1"
+        # A production trigger carries nothing else: version=dev would run
+        # an unpublished draft collector, and a Bright Data `deadline`
+        # once terminated a real production run mid-collection.
+        assert "version" not in request.url.params
+        assert "deadline" not in request.url.params
+        assert set(request.url.params) == {"collector", "queue_next"}
+        assert b"deadline" not in request.content
         assert request.headers["Authorization"] == "Bearer test-token-do-not-log"
         assert json.loads(request.content) == [{"url": "https://example.com"}]
         return httpx.Response(200, json={"collection_id": "j_abc"})
@@ -200,3 +208,72 @@ def test_provider_metadata_is_plain_data_not_used_for_control_flow(
         "malicious": "__class__",
     }
     assert isinstance(execution.provider_metadata, dict)
+
+
+@pytest.mark.parametrize(
+    ("bad_row", "value_type"),
+    [
+        ("unexpected string", "str"),
+        (None, "NoneType"),
+        (42, "int"),
+        (3.5, "float"),
+        (["nested", "list"], "list"),
+        (True, "bool"),
+    ],
+)
+def test_get_collector_output_rejects_a_non_object_row(
+    brightdata_settings: Settings, bad_row: object, value_type: str
+) -> None:
+    # A malformed row must never be silently dropped: two good rows and
+    # one garbage row is a broken dataset, not a two-record dataset.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"problem": "a"}, bad_row, {"problem": "b"}])
+
+    with (
+        make_client(brightdata_settings, handler) as client,
+        pytest.raises(BrightDataMalformedDatasetError) as excinfo,
+    ):
+        client.get_collector_output("j_abc")
+
+    assert excinfo.value.index == 1
+    assert excinfo.value.value_type == value_type
+    assert "j_abc" in str(excinfo.value)
+
+
+def test_malformed_dataset_error_is_an_invalid_response_error(
+    brightdata_settings: Settings,
+) -> None:
+    # Callers already handling BrightDataInvalidResponseError keep working.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=["nope"])
+
+    with (
+        make_client(brightdata_settings, handler) as client,
+        pytest.raises(BrightDataInvalidResponseError),
+    ):
+        client.get_collector_output("j_abc")
+
+
+def test_get_collector_output_reports_the_first_malformed_row(
+    brightdata_settings: Settings,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"problem": "a"}, None, "also bad"])
+
+    with (
+        make_client(brightdata_settings, handler) as client,
+        pytest.raises(BrightDataMalformedDatasetError) as excinfo,
+    ):
+        client.get_collector_output("j_abc")
+
+    assert excinfo.value.index == 1
+
+
+def test_empty_dataset_is_not_malformed(brightdata_settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    with make_client(brightdata_settings, handler) as client:
+        output = client.get_collector_output("j_abc")
+
+    assert output.records == []
