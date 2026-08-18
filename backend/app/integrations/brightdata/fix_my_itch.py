@@ -251,8 +251,9 @@ def to_raw_provider_record(
     - observed_at must be supplied by the caller (typically the collector
       run's completion time): the source publishes no per-row timestamp,
       and this layer will not invent one. It never affects identity.
-    - signal_type is COMPLAINT: every row on this page is a stated
-      unsolved problem.
+    - signal_type is PROBLEM: every row on this page is a stated
+      unsolved problem, which is this source's first-class role in
+      GapRadar's taxonomy.
     - The scoring inputs the Opportunity Engine will later need are
       preserved in the existing untrusted `metadata` payload rather than
       in new columns. Scores land as floats even where the source sent
@@ -265,7 +266,7 @@ def to_raw_provider_record(
         "canonical_url": record.source_url,
         "title": record.problem,
         "body": record.description,
-        "signal_type": SignalType.COMPLAINT.value,
+        "signal_type": SignalType.PROBLEM.value,
         "observed_at": observed_at,
         "metadata": {
             "source": record.source,

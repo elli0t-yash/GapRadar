@@ -357,7 +357,7 @@ def test_mapping_produces_the_generic_ingestion_contract(
     assert raw["canonical_url"] == FIX_MY_ITCH_SOURCE_URL
     assert raw["title"] == record.problem
     assert raw["body"] == record.description
-    assert raw["signal_type"] == SignalType.COMPLAINT.value
+    assert raw["signal_type"] == SignalType.PROBLEM.value
     assert raw["observed_at"] == OBSERVED_AT
     # No external_id: identity comes from the existing deterministic
     # content fingerprint.
@@ -514,7 +514,7 @@ def test_mapped_records_persist_through_existing_ingestion(
     assert result.accepted == len(batch)
     signal = db_session.get(Signal, result.persisted_signal_ids[0])
     assert signal is not None
-    assert signal.signal_type is SignalType.COMPLAINT
+    assert signal.signal_type is SignalType.PROBLEM
     assert signal.canonical_url == "https://razorpay.com/m/fix-my-itch"
     assert signal.signal_metadata["tam_score"] == batch[0]["tam_score"]
     assert signal.signal_metadata["industry"] == batch[0]["industry"]

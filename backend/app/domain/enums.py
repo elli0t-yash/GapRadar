@@ -27,4 +27,8 @@ class SignalType(str, enum.Enum):
     QUESTION = "question"
     FEATURE_REQUEST = "feature_request"
     REVIEW = "review"
+    # GapRadar's two first-class signal roles: a stated unsolved problem
+    # (e.g. Razorpay's Fix My Itch) and published research (e.g. arXiv).
+    PROBLEM = "problem"
+    RESEARCH = "research"
     OTHER = "other"

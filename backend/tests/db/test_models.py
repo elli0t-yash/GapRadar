@@ -213,3 +213,22 @@ def test_updated_at_changes_on_update(db_session: Session) -> None:
     db_session.refresh(source)
 
     assert source.updated_at >= original_updated_at
+
+
+@pytest.mark.parametrize("signal_type", list(SignalType))
+def test_signal_type_round_trips_for_every_taxonomy_value(
+    db_session: Session, signal_type: SignalType
+) -> None:
+    # signals.signal_type is a plain VARCHAR(32) holding the enum member
+    # name, so every value -- pre-existing and newly added -- must store
+    # and reload unchanged.
+    source = make_source()
+    collector_run = make_collector_run(make_collector(source))
+    signal = make_signal(source, collector_run, signal_type=signal_type)
+    db_session.add(signal)
+    db_session.commit()
+    db_session.expire_all()
+
+    reloaded = db_session.get(Signal, signal.id)
+    assert reloaded is not None
+    assert reloaded.signal_type is signal_type
