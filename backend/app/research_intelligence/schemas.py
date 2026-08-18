@@ -55,6 +55,49 @@ class ResearchCategory(BaseModel):
     label: str
 
 
+class MarketContext(BaseModel):
+    """The market pain, as the research side needs to see it.
+
+    Built from a persisted Signal via
+    app.research_intelligence.service.market_context_from_signal, which
+    routes through the Opportunity read model so query generation and
+    matching see exactly the wording the product surface shows -- not a
+    second, quietly divergent reading of the same row.
+
+    Pure: no ORM import, so every consumer of this module stays free of
+    the database.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    signal_id: uuid.UUID
+    # Signal.title / Opportunity.problem -- the stated pain.
+    problem: str
+    # Signal.body / Opportunity.description -- the elaboration.
+    description: str
+    # Source-published, and genuinely optional: a signal whose metadata
+    # carries no industry is not given an invented one.
+    industry: str | None = None
+
+
+class ResearchQueryPlan(BaseModel):
+    """The research searches one opportunity should drive, and why.
+
+    `concepts` is the vocabulary the generator actually recognised, which
+    is what makes the plan auditable: a plan whose concepts look nothing
+    like the problem is a plan whose queries will retrieve the wrong
+    literature, and that is visible here before a single provider run is
+    paid for.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    signal_id: uuid.UUID
+    queries: list[str]
+    concepts: list[str] = Field(default_factory=list)
+    rationale: str = ""
+
+
 class NormalizedResearchPaper(BaseModel):
     """A validated, normalized paper, ready to construct a ResearchPaper row.
 
@@ -120,3 +163,63 @@ class ResearchIngestionResult(BaseModel):
     def accepted(self) -> int:
         """Records that became a paper this call, new or existing."""
         return self.created + self.updated + self.unchanged
+
+
+# -- read model -------------------------------------------------------------
+# The frontend-facing view of one opportunity's research intelligence.
+# Read-only and computed from persisted rows: nothing here searches,
+# judges, or acquires anything.
+
+
+class ResearchPaperMatch(BaseModel):
+    """One matched paper, with the verdict that admitted it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    research_paper_id: uuid.UUID
+    arxiv_id: str
+    title: str
+    # The full abstract, for a detail view.
+    abstract: str
+    # A card-sized excerpt, cut at a word boundary. Provided alongside
+    # the full text rather than instead of it so a list of ten papers is
+    # not ~16 KB of prose the caller has to truncate itself.
+    abstract_preview: str
+    authors: list[str] = Field(default_factory=list)
+    categories: list[dict[str, Any]] = Field(default_factory=list)
+    published_at: date
+    paper_url: str
+    pdf_url: str
+    # 0-100, same scale as opportunity_score on the market side.
+    relevance_score: float
+    matched_concepts: list[str] = Field(default_factory=list)
+    match_reason: str | None = None
+    # None means "not assessed", never "not ready".
+    technical_readiness_score: float | None = None
+
+
+class ResearchIntelligence(BaseModel):
+    """Everything GapRadar currently knows about the research behind one pain.
+
+    Deliberately absent: research momentum and any composite GapRadar
+    score. Neither is computed yet, and shipping a placeholder for them
+    would be indistinguishable from a real value.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    signal_id: uuid.UUID
+    # Distinct queries this opportunity has actually been searched with,
+    # most recently searched first. Empty means no enrichment has run.
+    generated_queries: list[str] = Field(default_factory=list)
+    # Distinct papers any of those searches returned -- the candidate
+    # pool, not the accepted set.
+    paper_count: int = 0
+    # Papers that passed the relevance threshold.
+    matched_paper_count: int = 0
+    # Mean relevance across matches. None -- never 0 -- when there are no
+    # matches: an average of nothing is not zero.
+    average_relevance_score: float | None = None
+    # Concepts that recur across the matches, most frequent first.
+    top_concepts: list[str] = Field(default_factory=list)
+    top_papers: list[ResearchPaperMatch] = Field(default_factory=list)

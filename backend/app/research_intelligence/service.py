@@ -17,24 +17,35 @@ Two things happen per call, and they are deliberately different in kind:
 
 import logging
 import uuid
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import ResearchPaper, ResearchSearchResult, ResearchSearchRun
+from app.db.models import (
+    OpportunityResearchMatch,
+    ResearchPaper,
+    ResearchSearchResult,
+    ResearchSearchRun,
+    Signal,
+)
 from app.domain.enums import ResearchSource
+from app.opportunity_engine.schemas import Opportunity
 from app.research_intelligence.normalizer import (
     ResearchRecordRejectedError,
     normalize_arxiv_record,
 )
 from app.research_intelligence.schemas import (
+    MarketContext,
     NormalizedResearchPaper,
     RawResearchRecord,
     RejectedResearchRecord,
     ResearchIngestionResult,
+    ResearchIntelligence,
+    ResearchPaperMatch,
 )
 
 logger = logging.getLogger(__name__)
@@ -264,3 +275,157 @@ def _apply_updates(paper: ResearchPaper, normalized: NormalizedResearchPaper) ->
             setattr(paper, field, value)
             changed = True
     return changed
+
+
+# -- market context ---------------------------------------------------------
+
+
+def market_context_from_signal(signal: Signal) -> MarketContext:
+    """The research side's view of one market pain.
+
+    Routed through the Opportunity read model rather than reading the
+    Signal columns directly, so query generation and matching see exactly
+    the wording the product surface shows -- including the same guarded
+    reading of the untrusted metadata payload that `industry` comes from.
+    Two readings of one row would drift, and the drift would be invisible.
+    """
+    opportunity = Opportunity.from_signal(signal)
+    return MarketContext(
+        signal_id=signal.id,
+        problem=opportunity.problem,
+        description=opportunity.description,
+        industry=opportunity.industry,
+    )
+
+
+# -- read model -------------------------------------------------------------
+
+# Characters of abstract shown in a card-sized preview, cut back to a
+# word boundary so it never ends mid-word.
+ABSTRACT_PREVIEW_CHARS = 280
+
+DEFAULT_TOP_PAPERS = 10
+
+
+def abstract_preview(abstract: str, *, limit: int = ABSTRACT_PREVIEW_CHARS) -> str:
+    """A card-sized excerpt ending on a whole word."""
+    if len(abstract) <= limit:
+        return abstract
+    cut = abstract[:limit].rsplit(" ", 1)[0].rstrip(",;:.")
+    return f"{cut}\u2026"
+
+
+def get_research_intelligence(
+    session: Session,
+    *,
+    signal_id: uuid.UUID,
+    top_papers: int = DEFAULT_TOP_PAPERS,
+) -> ResearchIntelligence:
+    """Everything persisted about the research behind one opportunity.
+
+    READ ONLY. It never searches, never judges, and never contacts a
+    provider -- an opportunity that has not been enriched returns an
+    empty-but-valid result rather than triggering work on read.
+
+    Trust is NOT decided here. The caller establishes that the
+    opportunity is visible before asking, exactly as the Discover feed
+    does; this function answers about whatever signal id it is given.
+    """
+    runs = list(
+        session.execute(
+            select(ResearchSearchRun)
+            .where(ResearchSearchRun.signal_id == signal_id)
+            .order_by(ResearchSearchRun.searched_at.desc())
+        ).scalars()
+    )
+    queries: list[str] = []
+    for run in runs:
+        if run.query not in queries:
+            queries.append(run.query)
+
+    paper_count = (
+        session.execute(
+            select(func.count(func.distinct(ResearchSearchResult.research_paper_id)))
+            .select_from(ResearchSearchResult)
+            .join(
+                ResearchSearchRun,
+                ResearchSearchResult.research_search_run_id == ResearchSearchRun.id,
+            )
+            .where(ResearchSearchRun.signal_id == signal_id)
+        ).scalar_one()
+        or 0
+    )
+
+    matches = list(
+        session.execute(
+            select(OpportunityResearchMatch, ResearchPaper)
+            .join(
+                ResearchPaper,
+                OpportunityResearchMatch.research_paper_id == ResearchPaper.id,
+            )
+            .where(OpportunityResearchMatch.signal_id == signal_id)
+            .order_by(
+                OpportunityResearchMatch.relevance_score.desc(),
+                ResearchPaper.arxiv_id,
+            )
+        )
+    )
+
+    average = (
+        round(sum(match.relevance_score for match, _ in matches) / len(matches), 2)
+        if matches
+        else None
+    )
+
+    return ResearchIntelligence(
+        signal_id=signal_id,
+        generated_queries=queries,
+        paper_count=paper_count,
+        matched_paper_count=len(matches),
+        average_relevance_score=average,
+        top_concepts=_top_concepts(match for match, _ in matches),
+        top_papers=[
+            _paper_match(match, paper) for match, paper in matches[:top_papers]
+        ],
+    )
+
+
+def _paper_match(
+    match: OpportunityResearchMatch, paper: ResearchPaper
+) -> ResearchPaperMatch:
+    return ResearchPaperMatch(
+        research_paper_id=paper.id,
+        arxiv_id=paper.arxiv_id,
+        title=paper.title,
+        abstract=paper.abstract,
+        abstract_preview=abstract_preview(paper.abstract),
+        authors=list(paper.authors or []),
+        categories=list(paper.categories or []),
+        published_at=paper.published_at,
+        paper_url=paper.paper_url,
+        pdf_url=paper.pdf_url,
+        relevance_score=match.relevance_score,
+        matched_concepts=list(match.matched_concepts or []),
+        match_reason=match.match_reason,
+        technical_readiness_score=match.technical_readiness_score,
+    )
+
+
+def _top_concepts(
+    matches: Iterable[OpportunityResearchMatch], *, limit: int = 8
+) -> list[str]:
+    """Concepts ordered by how many matches mention them.
+
+    Ties break alphabetically so the same data always renders the same
+    list. Counted case-insensitively but reported in the casing the
+    matcher used.
+    """
+    counts: Counter[str] = Counter()
+    display: dict[str, str] = {}
+    for match in matches:
+        for concept in match.matched_concepts or []:
+            key = concept.lower()
+            counts[key] += 1
+            display.setdefault(key, concept)
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [display[key] for key, _ in ranked[:limit]]

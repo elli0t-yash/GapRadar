@@ -7,6 +7,10 @@ only by asking the pipeline to run.
 Asking the pipeline to run is a claim, not the work: POST answers 202
 with an execution id and the client polls GET /pipeline/runs/{id}. There
 is deliberately no endpoint that mutates an execution or an incident.
+
+Research intelligence is read-only for the same reason: enrichment
+acquires from a provider and judges relevance, so it is never reachable
+through a GET.
 """
 
 from fastapi import FastAPI
@@ -20,6 +24,7 @@ EXPECTED_PATHS = {
     ("GET", "/api/v1/dashboard"),
     ("GET", "/api/v1/opportunities"),
     ("GET", "/api/v1/opportunities/{signal_id}"),
+    ("GET", "/api/v1/opportunities/{signal_id}/research"),
     ("GET", "/api/v1/reliability"),
     ("GET", "/api/v1/reliability/incidents"),
     ("GET", "/api/v1/reliability/incidents/{incident_id}"),

@@ -14,6 +14,12 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.db.models import Signal
+from tests.api.conftest import (  # noqa: F401 - re-exported API fixtures
+    api_client,
+    brightdata_settings,
+    make_api_client,
+    scheduler,
+)
 from tests.opportunity_engine.conftest import (
     make_collector,
     make_run,
