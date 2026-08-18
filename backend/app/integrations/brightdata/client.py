@@ -287,9 +287,10 @@ class BrightDataClient:
         """Reject a self-healing fix that is awaiting approval.
 
         Verified: POST /dca/collectors/{collector_id}/resume_automation_job
-        Body: {"message": false}. auto_save is never sent on reject (the
-        reference implementation omits it there; Bright Data's API
-        ignores it on reject).
+        Body: {"message": false, "auto_save": false}. The reference CLI
+        omits auto_save on reject and Bright Data ignores it there, so
+        sending it explicitly is inert; it is sent because it states the
+        intent unambiguously on the wire.
 
         Note on interpreting the result: Bright Data's progress endpoint
         has no dedicated "rejected" wire status. After a successful
@@ -308,8 +309,13 @@ class BrightDataClient:
         self, collector_id: str, *, approve: bool, auto_save: bool
     ) -> None:
         body: dict[str, Any] = {"message": approve}
-        if approve and auto_save:
-            body["auto_save"] = True
+        if approve:
+            if auto_save:
+                body["auto_save"] = True
+        else:
+            # Explicit on reject: nothing about a rejected candidate is
+            # ever saved.
+            body["auto_save"] = False
         self._request(
             "POST",
             f"/dca/collectors/{collector_id}/{_RESUME_JOB_PATH}",
@@ -329,11 +335,14 @@ class BrightDataClient:
         else:
             status = HealingStatus.UNKNOWN
 
-        candidate_preview = data.get("preview_result", data.get("diff"))
+        preview_result = data.get("preview_result")
+        diff = data.get("diff")
         return HealingCandidate(
             collector_id=collector_id,
             status=status,
-            candidate_preview=candidate_preview,
+            candidate_preview=preview_result if preview_result is not None else diff,
+            preview_result=preview_result,
+            diff=diff,
             provider_metadata=data,
         )
 

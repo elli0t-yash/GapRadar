@@ -116,12 +116,18 @@ def test_semantic_drift_is_detected_healed_and_proven_by_a_fresh_run(
     )
 
 
-def test_recallguard_never_invokes_provider_healing() -> None:
-    # Task 4 wires Bright Data's heal/approve/reject in. This phase must
-    # only decide *whether* a repair is warranted and *whether* it worked.
-    package = Path(__file__).resolve().parents[2] / "app" / "recallguard"
-    sources = "\n".join(
-        path.read_text(encoding="utf-8") for path in package.glob("*.py")
+RECALLGUARD_PACKAGE = Path(__file__).resolve().parents[2] / "app" / "recallguard"
+
+
+def test_detection_and_verification_never_touch_the_provider() -> None:
+    # Only app/recallguard/healing.py may talk to Bright Data. The
+    # judgement of whether a collector is degraded, and whether a repair
+    # worked, must stay decidable from persisted evidence alone -- if the
+    # verifier could call the provider, "the provider says it is fixed"
+    # could leak into the verdict.
+    verification_core = "\n".join(
+        (RECALLGUARD_PACKAGE / name).read_text(encoding="utf-8")
+        for name in ("service.py", "detection.py", "schemas.py", "errors.py")
     )
 
     for forbidden in (
@@ -133,4 +139,17 @@ def test_recallguard_never_invokes_provider_healing() -> None:
         "resume_automation_job",
         "httpx",
     ):
+        assert forbidden not in verification_core
+
+
+def test_recallguard_never_shells_out_to_the_cli() -> None:
+    # The Bright Data CLI is a demo narration aid. Runtime code uses the
+    # HTTP client, so the same operations are testable and auditable.
+    sources = "\n".join(
+        path.read_text(encoding="utf-8") for path in RECALLGUARD_PACKAGE.glob("*.py")
+    )
+
+    # The CLI equivalents are documented in healing.py's docstring on
+    # purpose; what must not appear is any way of actually running them.
+    for forbidden in ("subprocess", "os.system", "shutil.which", "Popen", "os.exec"):
         assert forbidden not in sources

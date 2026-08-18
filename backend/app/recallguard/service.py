@@ -644,6 +644,85 @@ def _record_recovery(
     )
 
 
+def record_healing_failure(
+    session: Session,
+    incident: ReliabilityIncident,
+    *,
+    reason: str,
+    evidence: dict[str, Any] | None = None,
+    now: Callable[[], datetime] = _utcnow,
+) -> ReliabilityIncident:
+    """Return an in-flight repair to DEGRADED, keeping why it stopped.
+
+    Used when a repair attempt ends without ever reaching an independent
+    verification -- the provider failed, the candidate was rejected, or
+    the fresh collection never completed. The attempt still counts: the
+    attempt budget exists to stop repeated futile repairs, and a repair
+    that fell over is exactly that.
+    """
+    if incident.status not in (
+        IncidentStatus.HEALING,
+        IncidentStatus.VALIDATING,
+        IncidentStatus.VERIFYING,
+    ):
+        raise IncidentTransitionError(
+            f"incident {incident.id} is {incident.status.value}; only an "
+            "in-flight repair can be recorded as failed"
+        )
+
+    incident.status = IncidentStatus.DEGRADED
+    incident.evidence = _record_event(
+        incident.evidence,
+        {
+            "event": "healing_failed",
+            "at": now().isoformat(),
+            "attempt": incident.repair_attempts,
+            "reason": reason,
+            **(evidence or {}),
+        },
+    )
+    session.commit()
+    session.refresh(incident)
+    logger.warning(
+        "healing_failed",
+        extra={
+            "incident_id": str(incident.id),
+            "attempt": incident.repair_attempts,
+            "reason": reason,
+        },
+    )
+    return incident
+
+
+def escalate(
+    session: Session,
+    incident: ReliabilityIncident,
+    *,
+    reason: str,
+    evidence: dict[str, Any] | None = None,
+    now: Callable[[], datetime] = _utcnow,
+) -> ReliabilityIncident:
+    """Hand the incident to a human.
+
+    Called when RecallGuard cannot decide safely on its own -- not only
+    when the attempt budget runs out. An escalated incident stays active
+    and is never autonomously repaired again.
+    """
+    _escalate(session, incident, now=now)
+    incident.evidence = _record_event(
+        incident.evidence,
+        {
+            "event": "escalation_reason",
+            "at": now().isoformat(),
+            "reason": reason,
+            **(evidence or {}),
+        },
+    )
+    session.commit()
+    session.refresh(incident)
+    return incident
+
+
 def _escalate(
     session: Session,
     incident: ReliabilityIncident,

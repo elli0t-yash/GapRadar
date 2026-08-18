@@ -5,6 +5,14 @@ from app.recallguard.errors import (
     RepairAttemptLimitExceededError,
     VerificationRunRejectedError,
 )
+from app.recallguard.healing import (
+    DEFAULT_SELF_HEALING_POLICY,
+    HealingAttemptResult,
+    HealingOutcome,
+    SelfHealingPolicy,
+    execute_healing_attempt,
+)
+from app.recallguard.prompts import MAX_PROMPT_CHARS, build_heal_prompt
 from app.recallguard.schemas import (
     DEFAULT_POLICY,
     BaselineProfile,
@@ -19,7 +27,9 @@ from app.recallguard.service import (
     active_incident,
     begin_validation,
     collector_reliability_state,
+    escalate,
     evaluate_collector_run,
+    record_healing_failure,
     register_repair_candidate,
     start_healing,
     verify_recovery,
@@ -27,9 +37,13 @@ from app.recallguard.service import (
 
 __all__ = [
     "DEFAULT_POLICY",
+    "DEFAULT_SELF_HEALING_POLICY",
     "MAX_AUTONOMOUS_REPAIR_ATTEMPTS",
+    "MAX_PROMPT_CHARS",
     "BaselineProfile",
     "CheckResult",
+    "HealingAttemptResult",
+    "HealingOutcome",
     "IncidentTransitionError",
     "NonTerminalRunError",
     "RecallGuardError",
@@ -37,12 +51,17 @@ __all__ = [
     "ReliabilityEvaluation",
     "ReliabilityPolicy",
     "RepairAttemptLimitExceededError",
+    "SelfHealingPolicy",
     "VerificationRunRejectedError",
     "active_incident",
     "begin_validation",
+    "build_heal_prompt",
     "collector_reliability_state",
+    "escalate",
     "evaluate_collector_run",
+    "execute_healing_attempt",
     "profile_from_records",
+    "record_healing_failure",
     "register_repair_candidate",
     "start_healing",
     "verify_recovery",

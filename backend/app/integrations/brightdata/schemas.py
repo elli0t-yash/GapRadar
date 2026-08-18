@@ -136,5 +136,13 @@ class HealingCandidate(BaseModel):
     # Data's own type declares both as `unknown`), so kept as Any rather
     # than assumed to be a dict. Untrusted, as above.
     candidate_preview: Any | None = None
+    # The same two wire fields kept apart, because they are not
+    # interchangeable evidence: preview_result is what the repaired
+    # scraper would actually extract and can therefore be validated
+    # against the source contract, while diff only describes the
+    # template change. A caller deciding whether to approve a repair
+    # must be able to tell which one it is looking at.
+    preview_result: Any | None = None
+    diff: Any | None = None
     # Untrusted, as above.
     provider_metadata: dict[str, Any] = Field(default_factory=dict)

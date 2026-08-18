@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
+from app.config import Settings
 from app.db.models import Collector, CollectorRun, Source
 from app.domain.enums import CollectorStatus, RunStatus, SourceType
 from app.integrations.brightdata.fix_my_itch import FIX_MY_ITCH_SOURCE_URL
@@ -32,6 +33,15 @@ class FakeClock:
     def __call__(self) -> datetime:
         self.current += timedelta(seconds=1)
         return self.current
+
+
+@pytest.fixture
+def brightdata_settings() -> Settings:
+    return Settings(
+        _env_file=None,
+        BRIGHTDATA_API_KEY="test-token-do-not-log",
+        BRIGHTDATA_BASE_URL="https://api.brightdata.test",
+    )
 
 
 @pytest.fixture(scope="session")

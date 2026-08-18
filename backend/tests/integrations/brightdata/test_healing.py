@@ -220,14 +220,17 @@ def test_approve_healing_with_auto_save_sends_auto_save_flag(
         client.approve_healing("c_123", auto_save=True)
 
 
-def test_reject_healing_sends_message_false_without_auto_save(
+def test_reject_healing_sends_message_false_and_auto_save_false(
     brightdata_settings: Settings,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("resume_automation_job"):
             import json as _json
 
-            assert _json.loads(request.content) == {"message": False}
+            assert _json.loads(request.content) == {
+                "message": False,
+                "auto_save": False,
+            }
             return httpx.Response(200, json={})
         return httpx.Response(200, json={"status": "done"})
 
@@ -258,7 +261,10 @@ def test_approve_and_reject_are_separate_explicit_methods(
         client.approve_healing("c_123")
         client.reject_healing("c_123")
 
-    assert sent_bodies == [{"message": True}, {"message": False}]
+    assert sent_bodies == [
+        {"message": True},
+        {"message": False, "auto_save": False},
+    ]
 
 
 def test_request_healing_never_invokes_resume_automation_job(
