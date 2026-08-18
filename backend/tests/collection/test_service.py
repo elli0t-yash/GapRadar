@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 import httpx
@@ -340,6 +341,59 @@ def test_malformed_dataset_row_fails_the_run_without_ingesting(
     run_row = only_run(db_session)
     assert run_row.status is RunStatus.FAILED
     assert run_row.raw_metadata["orchestration"]["stage"] == "payload"
+
+
+# --- JSONL datasets ---------------------------------------------------------
+
+
+def jsonl_response(records: list[dict[str, Any]]) -> httpx.Response:
+    """A completed dataset in the serialization production actually used."""
+    return httpx.Response(
+        200,
+        content="\n".join(json.dumps(record) for record in records) + "\n",
+        headers={"Content-Type": "application/jsonl; charset=utf-8"},
+    )
+
+
+def test_a_jsonl_dataset_collects_end_to_end(
+    db_session: Session,
+    collector: Collector,
+    dataset: list[dict[str, Any]],
+    brightdata_settings: Settings,
+) -> None:
+    handler = ScriptedBrightData(get_responses=[jsonl_response(dataset)])
+
+    result = run(db_session, collector, handler, settings=brightdata_settings)
+
+    assert result.status is RunStatus.SUCCEEDED
+    assert result.fetched_record_count == len(dataset)
+    assert result.accepted == len(dataset)
+    assert signal_count(db_session) == len(dataset)
+
+
+def test_a_jsonl_dataset_carrying_the_tam_fault_is_still_rejected(
+    db_session: Session,
+    collector: Collector,
+    dataset: list[dict[str, Any]],
+    brightdata_settings: Settings,
+) -> None:
+    # The transport learning to read JSONL must not launder the payload:
+    # a tam_score of 70 has to reach the source validator as 70 and be
+    # rejected there, which is what makes the drift detectable later.
+    corrupted = [
+        {**record, "tam_score": record["tam_score"] * 10} for record in dataset
+    ]
+    handler = ScriptedBrightData(get_responses=[jsonl_response(corrupted)])
+
+    with pytest.raises(SourceContractValidationError) as excinfo:
+        run(db_session, collector, handler, settings=brightdata_settings)
+
+    assert len(excinfo.value.report.invalid) == len(dataset)
+    assert (
+        excinfo.value.report.invalid[0].raw["tam_score"] == dataset[0]["tam_score"] * 10
+    )
+    assert signal_count(db_session) == 0
+    assert only_run(db_session).status is RunStatus.FAILED
 
 
 # --- fail-closed source validation -----------------------------------------

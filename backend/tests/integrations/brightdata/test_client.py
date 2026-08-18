@@ -106,6 +106,159 @@ def test_get_collector_run_status_unexpected_shape_raises(
         client.get_collector_run_status("j_abc")
 
 
+JSONL_HEADERS = {"Content-Type": "application/jsonl; charset=utf-8"}
+
+
+def jsonl_body(*values: object) -> str:
+    return "\n".join(json.dumps(value) for value in values) + "\n"
+
+
+def jsonl_response(*values: object) -> httpx.Response:
+    """A completed dataset served the way a real production job served it."""
+    return httpx.Response(200, content=jsonl_body(*values), headers=JSONL_HEADERS)
+
+
+def test_get_collector_run_status_jsonl_dataset_is_succeeded(
+    brightdata_settings: Settings,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return jsonl_response({"problem": "a"}, {"problem": "b"})
+
+    with make_client(brightdata_settings, handler) as client:
+        execution = client.get_collector_run_status("j_abc")
+
+    assert execution.status is CollectorRunStatus.SUCCEEDED
+    assert execution.record_count == 2
+
+
+def test_single_row_jsonl_is_a_dataset_not_a_status_object(
+    brightdata_settings: Settings,
+) -> None:
+    # One JSON object on one line is a one-record dataset. It must not be
+    # mistaken for an in-progress status object merely because it is a
+    # dict -- nor rejected for not being a recognized status.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return jsonl_response({"problem": "only one"})
+
+    with make_client(brightdata_settings, handler) as client:
+        execution = client.get_collector_run_status("j_abc")
+        output = client.get_collector_output("j_abc")
+
+    assert execution.status is CollectorRunStatus.SUCCEEDED
+    assert execution.record_count == 1
+    assert output.records == [{"problem": "only one"}]
+
+
+def test_get_collector_output_reads_jsonl_rows_in_order(
+    brightdata_settings: Settings,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return jsonl_response(
+            {"problem": "first", "tam_score": 70},
+            {"problem": "second", "tam_score": 50},
+            {"problem": "third", "tam_score": 100},
+        )
+
+    with make_client(brightdata_settings, handler) as client:
+        output = client.get_collector_output("j_abc")
+
+    assert [record["problem"] for record in output.records] == [
+        "first",
+        "second",
+        "third",
+    ]
+    # Values arrive exactly as the provider sent them. Deciding that a
+    # tam_score of 70 is wrong belongs to the source validator; the
+    # transport must not rescale, clamp, or drop it.
+    assert [record["tam_score"] for record in output.records] == [70, 50, 100]
+
+
+def test_blank_lines_in_jsonl_are_separators_not_rows(
+    brightdata_settings: Settings,
+) -> None:
+    body = '{"problem": "a"}\n\n{"problem": "b"}\n\n'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers=JSONL_HEADERS)
+
+    with make_client(brightdata_settings, handler) as client:
+        output = client.get_collector_output("j_abc")
+
+    assert output.records == [{"problem": "a"}, {"problem": "b"}]
+
+
+def test_empty_jsonl_body_is_an_empty_dataset(
+    brightdata_settings: Settings,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content="", headers=JSONL_HEADERS)
+
+    with make_client(brightdata_settings, handler) as client:
+        execution = client.get_collector_run_status("j_abc")
+
+    assert execution.status is CollectorRunStatus.SUCCEEDED
+    assert execution.record_count == 0
+
+
+@pytest.mark.parametrize("method", ["get_collector_run_status", "get_collector_output"])
+def test_a_malformed_jsonl_line_rejects_the_whole_response(
+    brightdata_settings: Settings, method: str
+) -> None:
+    # Never skip the bad line and return the survivors: that would turn a
+    # corrupted dataset into a merely shorter one.
+    body = '{"problem": "a"}\n{"problem": broken\n{"problem": "c"}\n'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers=JSONL_HEADERS)
+
+    with (
+        make_client(brightdata_settings, handler) as client,
+        pytest.raises(BrightDataInvalidResponseError) as excinfo,
+    ):
+        getattr(client, method)("j_abc")
+
+    assert "line 2" in str(excinfo.value)
+    assert "j_abc" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("bad_row", "value_type"),
+    [("unexpected string", "str"), (None, "NoneType"), (42, "int"), ([1], "list")],
+)
+def test_a_non_object_jsonl_row_is_a_malformed_dataset(
+    brightdata_settings: Settings, bad_row: object, value_type: str
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return jsonl_response({"problem": "a"}, bad_row, {"problem": "c"})
+
+    with (
+        make_client(brightdata_settings, handler) as client,
+        pytest.raises(BrightDataMalformedDatasetError) as excinfo,
+    ):
+        client.get_collector_output("j_abc")
+
+    assert excinfo.value.index == 1
+    assert excinfo.value.value_type == value_type
+
+
+def test_jsonl_parsing_is_chosen_by_content_type(
+    brightdata_settings: Settings,
+) -> None:
+    # A JSON array is still read as a JSON array, whatever the row count.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=json.dumps([{"problem": "a"}, {"problem": "b"}]),
+            headers={"Content-Type": "application/json"},
+        )
+
+    with make_client(brightdata_settings, handler) as client:
+        assert client.get_collector_output("j_abc").records == [
+            {"problem": "a"},
+            {"problem": "b"},
+        ]
+
+
 def test_get_collector_output_maps_records(brightdata_settings: Settings) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[{"title": "post 1"}, {"title": "post 2"}])

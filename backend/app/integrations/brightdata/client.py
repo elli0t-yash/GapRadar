@@ -32,6 +32,20 @@ _DEFAULT_TIMEOUT_SECONDS = 30.0
 # so a genuinely new provider state surfaces instead of polling forever.
 _IN_PROGRESS_STATUSES = frozenset({"building", "collecting"})
 
+# /dca/dataset serves a completed dataset in either of two serializations:
+# a single JSON array, or newline-delimited JSON. A real completed
+# production job returned "application/jsonl; charset=utf-8" with one
+# JSON object per line, so the response's media type -- not a guess at
+# the body's shape -- decides how it is read.
+_JSONL_MEDIA_TYPES = frozenset(
+    {
+        "application/jsonl",
+        "application/x-jsonl",
+        "application/ndjson",
+        "application/x-ndjson",
+    }
+)
+
 # Path fragments confirmed via the official brightdata/cli source
 # (src/commands/scraper.ts). Collector-scoped; no separate healing/job ID
 # exists in the verified contract.
@@ -131,15 +145,16 @@ class BrightDataClient:
         {"status": "collecting", "message": "Job is not finished"}, which
         a real production job returned. Both mean the same thing to this
         client: keep polling.
-        Completed response: a JSON array of result rows -- there is no
-        documented explicit "done"/"succeeded" status string; completion
-        is inferred from the response being an array rather than a status
-        object. Any other shape, including an unrecognized status string,
-        raises BrightDataInvalidResponseError rather than being guessed
-        into a status.
+        Completed response: the result rows, as either a JSON array or a
+        JSONL body (see _read_dataset). There is no documented explicit
+        "done"/"succeeded" status string; completion is inferred from the
+        response carrying rows rather than a status object. Any other
+        shape, including an unrecognized status string, raises
+        BrightDataInvalidResponseError rather than being guessed into a
+        status.
         """
         response = self._request("GET", "/dca/dataset", params={"id": external_run_id})
-        data = self._parse_json(response)
+        data = self._read_dataset(response, external_run_id)
 
         if isinstance(data, list):
             return CollectorExecution(
@@ -166,11 +181,13 @@ class BrightDataClient:
         """Retrieve structured output for a completed run.
 
         Verified: GET /dca/dataset?id={external_run_id}
-        Completed response: JSON array of result rows.
+        Completed response: the result rows, as either a JSON array or a
+        JSONL body (see _read_dataset).
 
-        Raises BrightDataInvalidResponseError if the response is not a
-        JSON array -- callers should poll get_collector_run_status until
-        SUCCEEDED before calling this.
+        Raises BrightDataInvalidResponseError if the response carries no
+        rows -- typically because the run is still in progress and the
+        endpoint returned a status object instead. Callers should poll
+        get_collector_run_status until SUCCEEDED before calling this.
 
         Every row must be a JSON object. A row of any other shape raises
         BrightDataMalformedDatasetError naming the offending index: a
@@ -179,12 +196,12 @@ class BrightDataClient:
         smaller one.
         """
         response = self._request("GET", "/dca/dataset", params={"id": external_run_id})
-        data = self._parse_json(response)
+        data = self._read_dataset(response, external_run_id)
 
         if not isinstance(data, list):
             raise BrightDataInvalidResponseError(
                 f"Collector output for {external_run_id!r} is not ready, "
-                "or the response was not a JSON array. Poll "
+                "or the response carried no dataset rows. Poll "
                 "get_collector_run_status until status is SUCCEEDED before "
                 "calling get_collector_output."
             )
@@ -393,6 +410,67 @@ class BrightDataClient:
                 f"Bright Data returned {response.status_code} for {method} {path}"
             )
         return response
+
+    def _read_dataset(self, response: httpx.Response, external_run_id: str) -> Any:
+        """Read a /dca/dataset response in whichever serialization it used.
+
+        Returns a list of record objects for a completed dataset, or the
+        parsed JSON value (typically an in-progress status object) for
+        anything else -- callers decide what that means.
+
+        A JSONL body always yields a list, even when it holds a single
+        row: one JSON object on one line is a one-record dataset, not a
+        status object that happens to be a dict.
+
+        Nothing here inspects or alters record values. A tam_score of 70
+        arrives at the caller as 70; judging it is the source
+        validator's job, not the transport's.
+        """
+        if self._is_jsonl(response):
+            return self._parse_jsonl(response, external_run_id)
+        return self._parse_json(response)
+
+    @staticmethod
+    def _is_jsonl(response: httpx.Response) -> bool:
+        media_type = response.headers.get("content-type", "").split(";")[0]
+        return media_type.strip().lower() in _JSONL_MEDIA_TYPES
+
+    def _parse_jsonl(
+        self, response: httpx.Response, external_run_id: str
+    ) -> list[dict[str, Any]]:
+        """Parse newline-delimited JSON, one record per line, in order.
+
+        Fail-closed on both counts a line can be wrong: a line that is
+        not valid JSON fails the whole response, and a line that parses
+        into something other than an object is reported as a malformed
+        dataset row. Neither is ever skipped -- quietly dropping a line
+        would present a corrupted dataset as a merely shorter one.
+
+        Blank lines are ignored: they are separator noise, not rows, so
+        they do not shift the row indices reported in errors.
+        """
+        records: list[dict[str, Any]] = []
+        for line_number, line in enumerate(response.text.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise BrightDataInvalidResponseError(
+                    f"Bright Data returned a JSONL dataset for "
+                    f"{external_run_id!r} whose line {line_number} "
+                    "(1-based) is not valid JSON"
+                ) from exc
+            if not isinstance(value, dict):
+                raise BrightDataMalformedDatasetError(
+                    f"Dataset row {len(records)} of collection "
+                    f"{external_run_id!r} is a {type(value).__name__}, "
+                    "expected a JSON object",
+                    index=len(records),
+                    value_type=type(value).__name__,
+                )
+            records.append(value)
+        return records
 
     def _parse_json(self, response: httpx.Response) -> Any:
         try:
