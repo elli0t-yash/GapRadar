@@ -1,25 +1,25 @@
 :root {
-  --text: #6b5a4d;
-  --text-h: #b34700;
-  --text-muted: #a3907f;
-  --bg: #ffffff;
+  --text: #5b4a3d;
+  --text-h: #3a1e00;
+  --text-muted: #9c8879;
+  --bg: #fffaf5;
   --bg-raised: #ffffff;
-  --bg-subtle: #f6f6f2;
-  --border: #e5e5df;
-  --border-strong: #d3d3ca;
-  --accent: #ff6600;
-  --accent-2: #ff8f4d;
-  --accent-bg: rgba(255, 102, 0, 0.08);
-  --accent-border: rgba(255, 102, 0, 0.35);
-  --accent-text: #cc5200;
-  --hero-fg: #ffffff;
-  --hero-gradient: #ff6600;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.12);
+  --bg-subtle: #f7f5f2;
+  --border: #ece7e0;
+  --border-strong: #ddd5ca;
+  --accent: #ff6a00;
+  --accent-2: #ff9142;
+  --accent-bg: rgba(255, 106, 0, 0.08);
+  --accent-border: rgba(255, 106, 0, 0.3);
+  --accent-text: #c24700;
+  --shadow-sm: 0 1px 2px rgba(41, 21, 0, 0.06);
+  --shadow-md: 0 16px 32px -8px rgba(41, 21, 0, 0.16);
+  --shadow-lg: 0 24px 48px -12px rgba(41, 21, 0, 0.22);
+  --focus-ring: 0 0 0 3px rgba(255, 106, 0, 0.35);
 
   --sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+    "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -28,9 +28,10 @@
   --space-5: 32px;
   --space-6: 48px;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
 
   --fs-xs: 12px;
   --fs-sm: 13.5px;
@@ -45,23 +46,23 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #d9c6b8;
-    --text-h: #ffffff;
-    --text-muted: #9c8674;
-    --bg: #2b1505;
-    --bg-raised: #341a08;
-    --bg-subtle: #3d200c;
-    --border: #4a2a10;
-    --border-strong: #5c3616;
-    --accent: #ff6600;
-    --accent-2: #ff8f4d;
-    --accent-bg: rgba(255, 102, 0, 0.16);
-    --accent-border: rgba(255, 102, 0, 0.4);
-    --accent-text: #ff8f4d;
-    --hero-fg: #ffffff;
-    --hero-gradient: #cc5200;
+    --text: #5b4a3d;
+    --text-h: #3a1e00;
+    --text-muted: #9c8879;
+    --bg: #fffaf5;
+    --bg-raised: #ffffff;
+    --bg-subtle: #f7f5f2;
+    --border: #ece7e0;
+    --border-strong: #ddd5ca;
+    --accent: #ff6a00;
+    --accent-2: #ff9142;
+    --accent-bg: rgba(255, 106, 0, 0.16);
+    --accent-border: rgba(255, 106, 0, 0.4);
+    --accent-text: #ff9142;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 16px 32px -8px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+    --focus-ring: 0 0 0 3px rgba(255, 145, 66, 0.4);
   }
 }
 
@@ -108,6 +109,12 @@ a {
 
 button {
   font: inherit;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
 }
 
 ::selection {

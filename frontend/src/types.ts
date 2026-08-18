@@ -1,3 +1,10 @@
+export interface Listing {
+  id: string;
+  title: string;
+  category: string;
+  score: number;
+}
+
 export interface Problem {
   id: string;
   title: string;

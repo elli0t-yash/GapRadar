@@ -25,7 +25,10 @@ export function ProblemCard({
     >
       <div className="problem-card-top">
         <span className="problem-card-tag">{problem.category}</span>
-        <span className="problem-card-signal" title="Signal strength">
+        <span
+          className={`problem-card-signal${problem.signal >= 85 ? " is-hot" : ""}`}
+          title="Signal strength"
+        >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path
               d="M8 2.5l1.8 3.9 4.2.4-3.2 2.9.9 4.3L8 11.9l-3.7 2 .9-4.3-3.2-2.9 4.2-.4L8 2.5z"
@@ -47,6 +50,20 @@ export function ProblemCard({
         <span className="problem-card-date">
           {formatRelativeDate(problem.date)}
         </span>
+        <svg
+          className="problem-card-arrow"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M3.5 8h9M8.5 3.5 13 8l-4.5 4.5"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </div>
     </article>
   );

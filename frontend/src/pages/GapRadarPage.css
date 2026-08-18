@@ -1,9 +1,16 @@
-.gapradar-section {
-  margin-bottom: var(--space-6);
+.gapradar-content {
+  flex: 1;
+  background-color: #fffaf5;
+  background-image: radial-gradient(
+    circle,
+    rgba(244, 80, 46, 0.08) 1px,
+    transparent 1.2px
+  );
+  background-size: 22px 22px;
 }
 
-.gapradar-section:first-child {
-  margin-top: var(--space-5);
+.gapradar-section {
+  margin-bottom: var(--space-6);
 }
 
 .gapradar-section-header {

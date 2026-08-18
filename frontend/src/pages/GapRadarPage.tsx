@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "../components/PageShell";
 import { Hero } from "../components/Hero";
+import { DockingHeading } from "../components/DockingHeading";
 import { ProblemCard } from "../components/ProblemCard";
 import { ProblemDetail } from "../components/ProblemDetail";
 import { RecentShowcase } from "../components/RecentShowcase";
@@ -18,11 +19,12 @@ async function fetchProblems(): Promise<Problem[]> {
   return allProblems;
 }
 
-export function GapRadarPage() {
+export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
   const [problems, setProblems] = useState<Problem[] | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
+  const [cardsRevealed, setCardsRevealed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,61 +83,70 @@ export function GapRadarPage() {
         onCategoryChange={setCategory}
       />
 
-      <div className="container">
-        <section className="gapradar-section">
-          <div className="gapradar-section-header">
-            <h2>
-              Choose from {allProblems.length} problems worth solving{" "}
-              <span className="gapradar-stars" aria-hidden="true">
-                ★★★★★
-              </span>
-            </h2>
-            <p className="gapradar-section-subtitle">
-              Sorted by signal strength
-            </p>
-          </div>
+      <div className="gapradar-content">
+        <div className="container">
+          <DockingHeading
+            ready={introDone}
+            onDockComplete={() => setCardsRevealed(true)}
+          />
 
-          <div className="gapradar-grid">
-            {isLoading &&
-              Array.from({ length: FEATURED_COUNT }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
+          {cardsRevealed && (
+            <section className="gapradar-section">
+              <div className="gapradar-section-header">
+                <h2>
+                  Choose from {allProblems.length} problems worth solving{" "}
+                  <span className="gapradar-stars" aria-hidden="true">
+                    ★★★★★
+                  </span>
+                </h2>
+                <p className="gapradar-section-subtitle">
+                  Sorted by signal strength
+                </p>
+              </div>
 
-            {!isLoading && featuredProblems.length === 0 && (
+              <div className="gapradar-grid">
+                {isLoading &&
+                  Array.from({ length: FEATURED_COUNT }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
+
+                {!isLoading && featuredProblems.length === 0 && (
+                  <EmptyState onReset={resetFilters} />
+                )}
+
+                {!isLoading &&
+                  featuredProblems.map((problem) => (
+                    <ProblemCard
+                      key={problem.id}
+                      problem={problem}
+                      onOpen={setActiveProblem}
+                    />
+                  ))}
+              </div>
+            </section>
+          )}
+
+          <section className="gapradar-section">
+            {isLoading && (
+              <div className="gapradar-grid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            )}
+
+            {!isLoading && recentProblems.length === 0 && (
               <EmptyState onReset={resetFilters} />
             )}
 
-            {!isLoading &&
-              featuredProblems.map((problem) => (
-                <ProblemCard
-                  key={problem.id}
-                  problem={problem}
-                  onOpen={setActiveProblem}
-                />
-              ))}
-          </div>
-        </section>
-
-        <section className="gapradar-section">
-          {isLoading && (
-            <div className="gapradar-grid">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          )}
-
-          {!isLoading && recentProblems.length === 0 && (
-            <EmptyState onReset={resetFilters} />
-          )}
-
-          {!isLoading && recentProblems.length > 0 && (
-            <RecentShowcase
-              problems={recentProblems}
-              onOpen={setActiveProblem}
-            />
-          )}
-        </section>
+            {!isLoading && recentProblems.length > 0 && (
+              <RecentShowcase
+                problems={recentProblems}
+                onOpen={setActiveProblem}
+              />
+            )}
+          </section>
+        </div>
       </div>
 
       {activeProblem && (

@@ -1,67 +1,116 @@
 .problem-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 10px;
   padding: var(--space-4);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--bg-raised);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
   text-align: left;
+  overflow: hidden;
   transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.15s ease;
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+
+.problem-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
 }
 
 .problem-card:hover {
   border-color: var(--accent-border);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+}
+
+.problem-card:hover::before {
+  transform: scaleX(1);
 }
 
 .problem-card:focus-visible {
-  outline: 2px solid var(--accent-border);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--shadow-sm), var(--focus-ring);
 }
 
 .problem-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .problem-card-tag {
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent-text);
   background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
   padding: 3px var(--space-2);
   border-radius: 999px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .problem-card-signal {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
+  background: var(--bg-subtle);
+  padding: 3px 8px;
+  border-radius: 999px;
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }
 
 .problem-card-signal svg {
   width: 12px;
   height: 12px;
   color: var(--accent);
+  transition: color 0.25s ease;
+}
+
+.problem-card-signal.is-hot {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+}
+
+.problem-card-signal.is-hot svg {
+  color: #ffffff;
 }
 
 .problem-card-title {
   font-size: var(--fs-md);
+  font-weight: 700;
   line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text-h);
+  transition: color 0.2s ease;
+}
+
+.problem-card:hover .problem-card-title {
+  color: var(--accent-text);
 }
 
 .problem-card-description {
   font-size: var(--fs-sm);
+  line-height: 1.55;
   color: var(--text-muted);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -72,6 +121,7 @@
 .problem-card-meta {
   margin-top: auto;
   padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -80,5 +130,22 @@
 }
 
 .problem-card-source {
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.problem-card-arrow {
+  margin-left: auto;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.problem-card:hover .problem-card-arrow {
+  opacity: 1;
+  transform: translateX(0);
 }

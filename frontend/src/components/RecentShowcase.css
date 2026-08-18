@@ -31,60 +31,53 @@
   color: var(--text-h);
 }
 
-.recent-showcase-arrows {
-  margin-top: var(--space-3);
-  display: flex;
-  gap: var(--space-2);
-}
-
-.recent-showcase-arrow {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.recent-showcase-arrow svg {
-  width: 16px;
-  height: 16px;
-}
-
-.recent-showcase-arrow-solid {
-  background: var(--text-h);
-  color: var(--bg-raised);
-}
-
-.recent-showcase-arrow-solid:hover:not(:disabled) {
-  background: var(--accent-text);
-}
-
-.recent-showcase-arrow:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .recent-showcase-scroller {
   flex: 1;
   min-width: 0;
-  display: flex;
-  gap: var(--space-4);
-  overflow-x: auto;
-  scroll-behavior: smooth;
-  padding: var(--space-2) var(--space-1) var(--space-4);
-  scrollbar-width: none;
+  overflow: hidden;
+  padding: var(--space-2) 0 var(--space-4);
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 48px,
+    #000 calc(100% - 48px),
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 48px,
+    #000 calc(100% - 48px),
+    transparent
+  );
 }
 
-.recent-showcase-scroller::-webkit-scrollbar {
-  display: none;
+.recent-showcase-track {
+  display: flex;
+  gap: var(--space-4);
+  width: max-content;
+  animation: recent-showcase-marquee var(--marquee-duration, 32s) linear
+    infinite;
+}
+
+.recent-showcase-scroller:hover .recent-showcase-track,
+.recent-showcase-track:focus-within {
+  animation-play-state: paused;
+}
+
+@keyframes recent-showcase-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recent-showcase-track {
+    animation: none;
+  }
 }
 
 .recent-showcase-card {

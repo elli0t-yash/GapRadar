@@ -1,0 +1,122 @@
+[
+  {
+    "id": "listing-01",
+    "title": "Why do freelancers ghost projects after partial payments without accountability systems?",
+    "category": "B2B Services",
+    "score": 76
+  },
+  {
+    "id": "listing-02",
+    "title": "Why can’t small restaurants access wholesale ingredient pricing without large minimum orders?",
+    "category": "B2B Services",
+    "score": 71.5
+  },
+  {
+    "id": "listing-03",
+    "title": "Why don't salon bookings guarantee your preferred stylist?",
+    "category": "Beauty & Personal Care",
+    "score": 62
+  },
+  {
+    "id": "listing-04",
+    "title": "Why can't elderly people find at-home beautician services?",
+    "category": "Beauty & Personal Care",
+    "score": 75
+  },
+  {
+    "id": "listing-05",
+    "title": "Why is there no reliable same-day personalized gifting for last-minute occasions?",
+    "category": "Consumer Services",
+    "score": 65.5
+  },
+  {
+    "id": "listing-06",
+    "title": "Why do shoppers visit stores only to find items unavailable?",
+    "category": "E-commerce",
+    "score": 83
+  },
+  {
+    "id": "listing-07",
+    "title": "Why do hidden shipping fees inflate affordable product prices?",
+    "category": "E-commerce",
+    "score": 76.5
+  },
+  {
+    "id": "listing-08",
+    "title": "Why hasn’t tutoring shifted from answer-giving to skill-building learning?",
+    "category": "EdTech",
+    "score": 78.5
+  },
+  {
+    "id": "listing-09",
+    "title": "Why must students commit to expensive annual subscriptions before testing exam platforms?",
+    "category": "EdTech",
+    "score": 73.5
+  },
+  {
+    "id": "listing-10",
+    "title": "Why do people struggle to track where their money goes each month?",
+    "category": "FinTech",
+    "score": 90.5
+  },
+  {
+    "id": "listing-11",
+    "title": "Why do office workers resort to unhealthy afternoon snacks?",
+    "category": "Food & Beverage",
+    "score": 71
+  },
+  {
+    "id": "listing-12",
+    "title": "How do home painters quote prices without hidden costs?",
+    "category": "Home Services",
+    "score": 68.5
+  },
+  {
+    "id": "listing-13",
+    "title": "How do customers book electricians for small jobs?",
+    "category": "Home Services",
+    "score": 70
+  },
+  {
+    "id": "listing-14",
+    "title": "Why can't businesses compare courier rates easily?",
+    "category": "Logistics",
+    "score": 70
+  },
+  {
+    "id": "listing-15",
+    "title": "Why do payment apps have confusing cashback terms?",
+    "category": "Payment Issues",
+    "score": 81.2
+  },
+  {
+    "id": "listing-16",
+    "title": "Why don't homebuyers have standardized neighborhood quality data reports?",
+    "category": "Real Estate",
+    "score": 94.5
+  },
+  {
+    "id": "listing-17",
+    "title": "How do property ads lie about commute times?",
+    "category": "Real Estate",
+    "score": 85.5
+  },
+  {
+    "id": "listing-18",
+    "title": "How do small teams struggle with manual payroll calculations?",
+    "category": "SaaS",
+    "score": 82.2
+  },
+  {
+    "id": "listing-19",
+    "title": "Why aren’t office shuttles dynamically routed based on real-time employee demand?",
+    "category": "Transportation",
+    "score": 92.1
+  },
+  {
+    "id": "listing-20",
+    "title": "Why is it so hard to find power outlets for devices while traveling?",
+    "category": "Travel",
+    "score": 82.5
+  }
+]
