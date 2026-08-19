@@ -36,6 +36,7 @@ from app.pipeline.executor import (
     resume_unfinished_pipeline_runs,
     start_pipeline_run,
 )
+from tests.opportunity_engine.conftest import make_collector
 from tests.recallguard.healing_fakes import ScriptedProvider, done
 
 BUILDING = {"status": "building"}
@@ -842,3 +843,101 @@ def test_a_stranded_collecting_run_is_diagnosable_and_never_retriggers(
         fresh, already_running = start_pipeline_run(db_session, collector=collector)
         assert already_running is False
         assert fresh.id != stranded.id
+
+
+# -- scoping recovery to one collector --------------------------------------
+
+
+def test_the_resume_pass_covers_every_collector_by_default(
+    db_session: Session,
+    collector: Collector,
+    source: Source,
+    provider_settings: Settings,
+    good_records: list[dict[str, Any]],
+) -> None:
+    """The every-collector scheduler's behaviour, preserved exactly.
+
+    app.jobs.daily_pipeline relies on this: omitting collector_id must
+    still recover work across the whole system.
+    """
+    second = make_collector(
+        db_session, source, name="second", external_collector_id="c_second"
+    )
+    provider = CountingProvider(dataset=good_records, building_polls=1)
+
+    with client_for(provider, provider_settings) as client:
+        first_run, _ = start_pipeline_run(db_session, collector=collector)
+        second_run, _ = start_pipeline_run(db_session, collector=second)
+        # Both triggered, both left mid-flight.
+        resume_pipeline_run(db_session, client, pipeline_run_id=first_run.id)
+        resume_pipeline_run(db_session, client, pipeline_run_id=second_run.id)
+
+        recovered = resume_unfinished_pipeline_runs(db_session, client, sleep=no_sleep)
+
+    assert {item.id for item in recovered} == {first_run.id, second_run.id}
+
+
+def test_the_resume_pass_can_be_scoped_to_one_collector(
+    db_session: Session,
+    collector: Collector,
+    source: Source,
+    provider_settings: Settings,
+    good_records: list[dict[str, Any]],
+) -> None:
+    """A single-collector caller must not advance anyone else's work."""
+    second = make_collector(
+        db_session, source, name="second", external_collector_id="c_second"
+    )
+    provider = CountingProvider(dataset=good_records, building_polls=1)
+
+    with client_for(provider, provider_settings) as client:
+        mine, _ = start_pipeline_run(db_session, collector=collector)
+        theirs, _ = start_pipeline_run(db_session, collector=second)
+        resume_pipeline_run(db_session, client, pipeline_run_id=mine.id)
+        resume_pipeline_run(db_session, client, pipeline_run_id=theirs.id)
+        triggers_before = provider.trigger_count
+
+        recovered = resume_unfinished_pipeline_runs(
+            db_session, client, collector_id=collector.id, sleep=no_sleep
+        )
+
+    assert [item.id for item in recovered] == [mine.id]
+    # The other collector's execution is left exactly where it was.
+    db_session.refresh(theirs)
+    assert theirs.status is PipelineRunStatus.WAITING_PROVIDER
+    # And no additional collection was bought for anyone.
+    assert provider.trigger_count == triggers_before
+
+
+def test_a_scoped_resume_never_triggers_another_collectors_queued_run(
+    db_session: Session,
+    collector: Collector,
+    source: Source,
+    provider_settings: Settings,
+    good_records: list[dict[str, Any]],
+) -> None:
+    """QUEUED is the dangerous case: resuming it STARTS a collection.
+
+    Asserted against the trigger counter rather than a status, because
+    "did we scrape a collector we were not pointed at" is the question.
+    """
+    second = make_collector(
+        db_session, source, name="second", external_collector_id="c_second"
+    )
+    provider = CountingProvider(dataset=good_records)
+
+    with client_for(provider, provider_settings) as client:
+        theirs, _ = start_pipeline_run(db_session, collector=second)
+        assert theirs.status is PipelineRunStatus.QUEUED
+        assert provider.trigger_count == 0
+
+        recovered = resume_unfinished_pipeline_runs(
+            db_session, client, collector_id=collector.id, sleep=no_sleep
+        )
+
+    assert recovered == []
+    # Nothing was triggered at all: their QUEUED run was never touched.
+    assert provider.trigger_count == 0
+    db_session.refresh(theirs)
+    assert theirs.status is PipelineRunStatus.QUEUED
+    assert theirs.provider_job_id is None
