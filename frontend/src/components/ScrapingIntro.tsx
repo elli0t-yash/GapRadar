@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import listingsData from "../data/mock-listings.json";
+// Decorative content for the intro animation ONLY. These are not
+// opportunities, are never navigable, and are gone within seconds. The
+// product feed has exactly one source: the backend (src/api/opportunities.ts).
+import listingsData from "../data/intro-animation-listings.json";
 import type { Listing } from "../types";
 import "./ScrapingIntro.css";
 

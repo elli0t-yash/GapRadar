@@ -1,5 +1,4 @@
 import { useRef } from "react";
-import { categories } from "../data/problems";
 import "./Hero.css";
 
 function ScrollArrow({
@@ -34,11 +33,18 @@ export function Hero({
   onQueryChange,
   category,
   onCategoryChange,
+  categories,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   category: string;
   onCategoryChange: (value: string) => void;
+  /**
+   * Derived from the opportunities actually returned by the API. The backend
+   * exposes no industry filter, so the feed on screen is the only honest
+   * source for these chips.
+   */
+  categories: string[];
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 

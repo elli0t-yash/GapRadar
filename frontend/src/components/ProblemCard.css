@@ -149,3 +149,13 @@
   opacity: 1;
   transform: translateX(0);
 }
+
+/* "Not scorable" is a real backend answer, not a zero. Rendered in the muted
+   voice so it reads as an absence of data rather than a low score. */
+.problem-card-signal.is-unscored {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.01em;
+}

@@ -134,3 +134,15 @@
 .problem-detail-link:hover {
   text-decoration: underline;
 }
+
+/* Shown when the authoritative detail fetch fails but the cached row is
+   still on screen -- the modal stays usable rather than blanking. */
+.problem-detail-notice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--accent-text);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+}

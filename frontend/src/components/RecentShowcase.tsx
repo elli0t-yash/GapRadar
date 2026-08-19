@@ -53,14 +53,14 @@ export function RecentShowcase({
             >
               <span className="recent-showcase-header">
                 <span className="recent-showcase-avatar" aria-hidden="true">
-                  {problem.category.charAt(0)}
+                  {(problem.category ?? "—").charAt(0)}
                 </span>
                 <span className="recent-showcase-who">
                   <span className="recent-showcase-name">
-                    {problem.category}
+                    {problem.category ?? "Uncategorised"}
                   </span>
                   <span className="recent-showcase-role">
-                    {problem.source}
+                    {problem.source ?? "Unknown source"}
                   </span>
                 </span>
               </span>
@@ -69,7 +69,9 @@ export function RecentShowcase({
 
               <span className="recent-showcase-pill">
                 {formatRelativeDate(problem.date)}
-                <Stars count={Math.round((problem.signal / 100) * 5) || 1} />
+                {problem.signal !== null && (
+                  <Stars count={Math.round((problem.signal / 100) * 5) || 1} />
+                )}
               </span>
             </button>
           ))}

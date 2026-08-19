@@ -9,6 +9,7 @@ from app.db.models import (  # noqa: F401  (import registers models on Base.meta
     Collector,
     CollectorRun,
     OpportunityResearchMatch,
+    ResearchEnrichmentRun,
     ResearchPaper,
     ResearchSearchResult,
     ResearchSearchRun,
