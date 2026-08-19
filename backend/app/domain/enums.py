@@ -93,31 +93,6 @@ class ResearchEnrichmentStatus(str, enum.Enum):
     FAILED = "failed"
 
 
-class ResearchEnrichmentStatus(str, enum.Enum):
-    """Lifecycle of ONE on-demand research enrichment job.
-
-    Deliberately tiny -- four states, not the nine PipelineRunStatus has.
-    The pipeline's finer stages exist because a collection can stall at a
-    specific provider boundary an operator needs to see; a research
-    enrichment is a single unit of work a user is waiting on, and
-    inventing sub-stages the UI would then be tempted to render as
-    progress would be fabricating detail the backend does not track.
-
-    QUEUED and RUNNING are active; SUCCEEDED and FAILED are terminal.
-
-    FAILED means the job could not be carried out -- a refused query
-    plan, or every provider search failing. It is NOT a statement that
-    there is no relevant research: a job that ran fine and matched
-    nothing is SUCCEEDED with zero matches, which the research read model
-    reports separately.
-    """
-
-    QUEUED = "queued"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-
-
 class SignalType(str, enum.Enum):
     COMPLAINT = "complaint"
     QUESTION = "question"
