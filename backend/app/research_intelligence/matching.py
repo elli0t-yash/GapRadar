@@ -18,7 +18,7 @@ What exists instead is:
 """
 
 import math
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -136,6 +136,25 @@ class ResearchMatchVerdict(BaseModel):
         if not isinstance(value, str) or not value.strip():
             raise ValueError("match_reason must be a non-blank string")
         return " ".join(value.split())
+
+
+@runtime_checkable
+class ReportsJudgingFailures(Protocol):
+    """A matcher that can say how often it FAILED, as opposed to declined.
+
+    The SemanticMatcher protocol returns None for "no opinion", which
+    deliberately covers both "this paper is unjudgeable" and "the
+    provider broke". That conflation is correct for one paper and wrong
+    for a run: a judge that never answered at all must not look like a
+    judge that answered "no" every time.
+
+    Optional on purpose. A deterministic matcher has no failures to
+    report and does not implement this; callers check with isinstance and
+    treat its absence as zero.
+    """
+
+    @property
+    def failures(self) -> int: ...
 
 
 class SemanticMatcher(Protocol):

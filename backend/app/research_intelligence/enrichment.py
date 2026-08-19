@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import ResearchEnrichmentRun, Signal
 from app.db.models.research_enrichment_run import ACTIVE_ENRICHMENT_STATUSES
-from app.domain.enums import ResearchEnrichmentStatus
+from app.domain.enums import ResearchEnrichmentStatus, ResearchOutcomeReason
 from app.research_intelligence.acquisition import ResearchCollector
 from app.research_intelligence.execution import (
     RESEARCH_ACQUISITION_BUDGET_SECONDS,
@@ -41,6 +41,7 @@ from app.research_intelligence.query_generation import (
     ConceptQueryGenerator,
     ResearchQueryGenerationError,
     ResearchQueryGenerator,
+    ResearchQueryProviderError,
 )
 from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
 from app.research_intelligence.service import market_context_from_signal
@@ -145,6 +146,88 @@ def build_plan(
     return plan
 
 
+class ResearchPlanUnavailableError(Exception):
+    """No stage could produce queries worth a provider call.
+
+    A DEAD END, not a failure: the deterministic generator is a pure
+    function of the problem text, and the fallback has already been asked.
+    Retrying the same opportunity produces this same result, which is
+    exactly why the outcome reason it maps to is not retryable.
+    """
+
+
+class QueryGenerationProviderError(Exception):
+    """The fallback generator could not be reached or malfunctioned.
+
+    Different from ResearchPlanUnavailableError in the one way that
+    matters to a user: the plan was never judged on its merits, so
+    retrying can genuinely change the answer.
+    """
+
+
+def build_plan_with_fallback(
+    context: MarketContext,
+    *,
+    generator: ResearchQueryGenerator | None = None,
+    fallback: ResearchQueryGenerator | None = None,
+) -> ResearchQueryPlan:
+    """Deterministic first; ask the fallback only if that plan is refused.
+
+    The ordering is the cost control. `ConceptQueryGenerator` is free and
+    deterministic and already handles most opportunities, so the model is
+    reached only for the problems whose wording matched no research
+    vocabulary -- the ones that were previously a dead end.
+
+    THE GATE APPLIES TO BOTH STAGES. A fallback plan runs through the
+    same `validate_plan` that rejected the deterministic one, so a model
+    cannot buy a Bright Data job by returning "{industry} systems" in
+    nicer words. Nothing here contacts a provider; the collector is
+    reached only after this function returns.
+    """
+    deterministic_error: Exception | None = None
+    try:
+        return build_plan(context, generator)
+    except (ResearchPlanRejectedError, ResearchQueryGenerationError) as exc:
+        # Both mean the same thing to the caller: the deterministic stage
+        # has nothing specific enough to search for.
+        deterministic_error = exc
+        logger.info(
+            "[research-enrichment] deterministic plan rejected, trying "
+            "fallback: %s",
+            exc,
+        )
+
+    if fallback is None:
+        raise ResearchPlanUnavailableError(str(deterministic_error))
+
+    try:
+        plan = fallback.generate(context)
+    except ResearchQueryProviderError as exc:
+        # Nothing was concluded -- the service was unreachable or its
+        # answer was unreadable. Worth retrying.
+        raise QueryGenerationProviderError(
+            f"the research query generator could not be reached ({exc})"
+        ) from exc
+    except ResearchQueryGenerationError as exc:
+        # The model answered, and its answer was unusable. That is a dead
+        # end for this problem, not a transient provider fault.
+        raise ResearchPlanUnavailableError(
+            "no sufficiently specific research search could be formed for "
+            "this problem"
+        ) from exc
+
+    try:
+        validate_plan(plan)
+    except ResearchPlanRejectedError as exc:
+        raise ResearchPlanUnavailableError(
+            "no sufficiently specific research search could be formed for "
+            "this problem"
+        ) from exc
+
+    logger.info("[research-enrichment] fallback plan accepted queries=%r", plan.queries)
+    return plan
+
+
 # -- claiming ---------------------------------------------------------------
 
 
@@ -239,6 +322,7 @@ def execute_enrichment(
     collector: ResearchCollector,
     matcher: SemanticMatcher | None = None,
     generator: ResearchQueryGenerator | None = None,
+    fallback_generator: ResearchQueryGenerator | None = None,
     now: Callable[[], datetime] = _utcnow,
     acquisition_budget_seconds: float = RESEARCH_ACQUISITION_BUDGET_SECONDS,
 ) -> ResearchEnrichmentRun:
@@ -260,25 +344,53 @@ def execute_enrichment(
 
     signal = session.get(Signal, run.signal_id)
     if signal is None:  # pragma: no cover - defensive
-        return _fail(session, run, "the opportunity no longer exists", now=now)
+        return _fail(
+            session,
+            run,
+            "the opportunity no longer exists",
+            now=now,
+            reason=ResearchOutcomeReason.OPPORTUNITY_MISSING,
+        )
 
     run.status = ResearchEnrichmentStatus.RUNNING
     run.started_at = now()
     session.commit()
     logger.info("[research-enrichment] running id=%s", run.id)
 
+    context = market_context_from_signal(signal)
     try:
-        plan = build_plan(market_context_from_signal(signal), generator)
-    except ResearchPlanRejectedError as exc:
-        logger.info(
-            "research_enrichment_plan_rejected",
-            extra={"enrichment_id": str(run.id), "reason": str(exc)},
+        plan = build_plan_with_fallback(
+            context, generator=generator, fallback=fallback_generator
         )
-        return _fail(session, run, str(exc), now=now)
-    except ResearchQueryGenerationError as exc:
-        # The generator itself refused -- the wording matched nothing and
-        # it declined to pad the plan. Same outcome, different author.
-        return _fail(session, run, str(exc), now=now)
+    except ResearchPlanUnavailableError as exc:
+        # Both stages declined. Deterministic input produces a
+        # deterministic answer, so this is NOT retryable and the UI must
+        # not offer a button that repeats it.
+        logger.info(
+            "[research-enrichment] plan unavailable id=%s reason=%s", run.id, exc
+        )
+        return _fail(
+            session,
+            run,
+            str(exc),
+            now=now,
+            reason=ResearchOutcomeReason.QUERY_PLAN_UNAVAILABLE,
+        )
+    except QueryGenerationProviderError as exc:
+        # The fallback provider itself failed, so the plan was never
+        # judged on its merits. Retrying can genuinely differ.
+        logger.warning(
+            "[research-enrichment] query generation provider failed id=%s: %s",
+            run.id,
+            exc,
+        )
+        return _fail(
+            session,
+            run,
+            str(exc),
+            now=now,
+            reason=ResearchOutcomeReason.QUERY_GENERATION_PROVIDER_ERROR,
+        )
 
     logger.info(
         "[research-enrichment] generated %d queries id=%s", len(plan.queries), run.id
@@ -319,12 +431,45 @@ def execute_enrichment(
     # third query timed out would be the worst of both worlds -- money
     # spent, nothing delivered.
     if result.queries and not result.successful_queries:
+        timed_out = len(result.timed_out_queries) == len(result.queries)
         return _fail(
             session,
             run,
             _all_searches_failed_message(result),
             now=now,
+            reason=(
+                ResearchOutcomeReason.TIMEOUT
+                if timed_out
+                else ResearchOutcomeReason.ACQUISITION_FAILED
+            ),
             query_states=_states_from_result(result),
+            counters=_counters_from_result(result),
+        )
+
+    # -- semantic outage vs an honest zero result ----------------------
+    #
+    # These look identical in the counters and mean opposite things. The
+    # ONLY thing that separates them is whether the matcher reported a
+    # FAILURE, so that is what is tested -- never `judged < selected`,
+    # which is also true of a normal run where some papers were declined
+    # on their merits or trimmed by the candidate cap.
+    counters = _counters_from_result(result)
+    if (
+        result.judging_failures > 0
+        and counters["selected"] > 0
+        and counters["judged"] == 0
+    ):
+        # Papers were selected and NOTHING came back. Calling that "no
+        # relevant research" would report a verdict the judge never gave.
+        # Counters earned before the outage are preserved, not zeroed.
+        return _fail(
+            session,
+            run,
+            "the research matcher could not be reached, so no paper was judged",
+            now=now,
+            reason=ResearchOutcomeReason.SEMANTIC_MATCHING_FAILED,
+            query_states=_states_from_result(result),
+            counters=counters,
         )
 
     duration = round((now() - started).total_seconds(), 2)
@@ -334,6 +479,8 @@ def execute_enrichment(
     # Set alongside SUCCEEDED, never instead of it.
     run.warning = result.acquisition_warning
     run.query_states = _states_from_result(result)
+    run.counters = counters
+    run.outcome_reason = _success_reason(result)
     session.commit()
     session.refresh(run)
     logger.info(
@@ -390,6 +537,56 @@ def _publish_progress(
         session.rollback()
 
 
+def _counters_from_result(result: ResearchEnrichmentResult) -> dict[str, int]:
+    """The four counts that describe one run's funnel.
+
+    THE ONE PLACE any of these numbers is computed. Each comes from the
+    orchestration's own result rather than being reconstructed later,
+    because three of the four are unrecoverable once the run ends:
+    rejected verdicts are not persisted.
+
+    `discovered` is the DISTINCT paper count, never the sum of per-query
+    counts. A paper returned by two searches is one paper; summing them
+    is what produced a UI reporting 34 papers for a run whose own summary
+    said 20, and query-level counts stay in query_states for diagnostics
+    rather than feeding this.
+
+    `selected` and `judged` are kept apart on purpose. They differ
+    whenever the semantic matcher declined on some candidates -- a
+    provider failure mid-run -- and collapsing them would hide exactly
+    that.
+    """
+    return {
+        "discovered": result.candidate_paper_count,
+        "selected": result.judged_paper_count,
+        "judged": result.matches_created
+        + result.matches_updated
+        + result.matches_rejected,
+        "matched": result.matches_created + result.matches_updated,
+    }
+
+
+def _success_reason(
+    result: ResearchEnrichmentResult,
+) -> ResearchOutcomeReason | None:
+    """Why a SUCCEEDED run is worth explaining, or None if it is not.
+
+    An ordinary success with matches carries no reason: there is nothing
+    to say beyond the research itself. The two that do carry one are the
+    states the UI would otherwise have to guess at -- and would otherwise
+    render as failures.
+    """
+    if result.is_partial:
+        # Real research, built on less than the full plan. Stated, not
+        # hidden, and still a success.
+        return ResearchOutcomeReason.ACQUISITION_PARTIAL
+    if result.matches_created + result.matches_updated == 0:
+        # We looked properly and found nothing above the bar. An answer,
+        # not a failure.
+        return ResearchOutcomeReason.NO_RELEVANT_RESEARCH
+    return None
+
+
 def _states_from_result(result: ResearchEnrichmentResult) -> list[dict[str, object]]:
     """Per-query state rebuilt from the finished orchestration result.
 
@@ -438,17 +635,32 @@ def _fail(
     message: str,
     *,
     now: Callable[[], datetime],
+    reason: ResearchOutcomeReason = ResearchOutcomeReason.UNEXPECTED_ERROR,
     query_states: list[dict[str, object]] | None = None,
+    counters: dict[str, int] | None = None,
 ) -> ResearchEnrichmentRun:
-    """Close the enrichment as FAILED, keeping why."""
+    """Close the enrichment as FAILED, keeping why -- in both forms.
+
+    `error` is the sentence a person reads; `outcome_reason` is the value
+    the frontend branches on. Both are written together so they can never
+    describe different failures.
+    """
     run.status = ResearchEnrichmentStatus.FAILED
     run.completed_at = now()
     run.error = message
+    run.outcome_reason = reason
     if query_states is not None:
         run.query_states = query_states
+    if counters is not None:
+        run.counters = counters
     session.commit()
     session.refresh(run)
-    logger.warning("[research-enrichment] failed id=%s reason=%s", run.id, message)
+    logger.warning(
+        "[research-enrichment] failed id=%s reason=%s detail=%s",
+        run.id,
+        reason.value,
+        message,
+    )
     return run
 
 

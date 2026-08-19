@@ -163,6 +163,20 @@ class ResearchQueryGenerationError(Exception):
     """
 
 
+class ResearchQueryProviderError(Exception):
+    """A generator's backing service could not be reached.
+
+    Separate from ResearchQueryGenerationError, which means "this input
+    yields no good queries" -- a conclusion. This one means no conclusion
+    was reached at all, which is the only difference that matters when
+    deciding whether a retry could help.
+
+    Declared HERE, in the port, so an adapter can report a transport
+    failure without the research core importing a vendor's exception
+    types. Nothing in this package may import app.integrations.
+    """
+
+
 class ResearchQueryGenerator(Protocol):
     """Produces the research queries for one opportunity.
 

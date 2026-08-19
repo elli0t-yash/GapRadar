@@ -9,6 +9,8 @@ import {
 import { toProblem } from "../api/adapters";
 import type {
   ResearchEnrichmentStatus,
+  ResearchEnrichmentCounters,
+  ResearchOutcomeReason,
   ResearchQueryState,
   ResearchIntelligence,
 } from "../api/types";
@@ -39,6 +41,16 @@ function describeError(error: unknown): string {
 
   return "Something went wrong.";
 }
+
+// A run that has reported nothing yet, and the shape old runs
+// (counters={}) deserialize to. Frozen so no consumer can mutate the
+// shared default.
+const EMPTY_COUNTERS: ResearchEnrichmentCounters = Object.freeze({
+  discovered: 0,
+  selected: 0,
+  judged: 0,
+  matched: 0,
+});
 
 export function ProblemDetail({
   problem,
@@ -152,6 +164,13 @@ export function ProblemDetail({
   const [enrichmentQueryStates, setEnrichmentQueryStates] = useState<
     ResearchQueryState[]
   >([]);
+  const [enrichmentCounters, setEnrichmentCounters] =
+    useState<ResearchEnrichmentCounters>(EMPTY_COUNTERS);
+  // Typed outcome + backend-computed retryability. Reflected verbatim:
+  // this component never decides whether a retry makes sense.
+  const [enrichmentOutcomeReason, setEnrichmentOutcomeReason] =
+    useState<ResearchOutcomeReason | null>(null);
+  const [enrichmentIsRetryable, setEnrichmentIsRetryable] = useState(false);
   // Guards a genuine double-click. StrictMode re-invokes effects, never
   // handlers, so this is the only race it has to close -- the backend's
   // active-job constraint stays the authority.
@@ -170,6 +189,9 @@ export function ProblemDetail({
     setEnrichmentError(null);
     setEnrichmentWarning(null);
     setEnrichmentQueryStates([]);
+    setEnrichmentCounters(EMPTY_COUNTERS);
+    setEnrichmentOutcomeReason(null);
+    setEnrichmentIsRetryable(false);
 
     getResearchEnrichment(problem.id)
       .then((job) => {
@@ -177,7 +199,10 @@ export function ProblemDetail({
 
         setEnrichmentStatus(job.status);
         setEnrichmentQueryStates(job.query_states);
+        setEnrichmentCounters(job.counters);
         setEnrichmentWarning(job.warning);
+        setEnrichmentOutcomeReason(job.outcome_reason);
+        setEnrichmentIsRetryable(job.is_retryable);
         if (job.status === "failed") setEnrichmentError(job.error);
       })
       .catch(() => {
@@ -202,7 +227,10 @@ export function ProblemDetail({
 
           setEnrichmentStatus(job.status);
           setEnrichmentQueryStates(job.query_states);
+          setEnrichmentCounters(job.counters);
           setEnrichmentWarning(job.warning);
+          setEnrichmentOutcomeReason(job.outcome_reason);
+          setEnrichmentIsRetryable(job.is_retryable);
           if (job.status === "failed") setEnrichmentError(job.error);
           if (isEnrichmentTerminal(job.status)) {
             window.clearInterval(timer);
@@ -232,6 +260,9 @@ export function ProblemDetail({
     setEnrichmentError(null);
     setEnrichmentWarning(null);
     setEnrichmentQueryStates([]);
+    setEnrichmentCounters(EMPTY_COUNTERS);
+    setEnrichmentOutcomeReason(null);
+    setEnrichmentIsRetryable(false);
     setEnrichmentStatus("queued");
 
     startResearchEnrichment(problem.id)
@@ -378,6 +409,9 @@ export function ProblemDetail({
           enrichmentStatus={enrichmentStatus}
           enrichmentError={enrichmentError}
           enrichmentQueryStates={enrichmentQueryStates}
+          enrichmentCounters={enrichmentCounters}
+          enrichmentOutcomeReason={enrichmentOutcomeReason}
+          enrichmentIsRetryable={enrichmentIsRetryable}
           enrichmentStarting={enrichmentStarting}
           enrichmentWarning={enrichmentWarning}
           onAnalyse={analyse}

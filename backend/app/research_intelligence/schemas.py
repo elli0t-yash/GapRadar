@@ -11,12 +11,16 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field
 
 # The only app import here, and deliberately a leaf: app.domain.enums
 # defines enums and imports nothing, so this module stays free of the
 # ORM and of every provider.
-from app.domain.enums import ResearchEnrichmentStatus, ResearchQueryStatus
+from app.domain.enums import (
+    ResearchEnrichmentStatus,
+    ResearchOutcomeReason,
+    ResearchQueryStatus,
+)
 
 # One raw record exactly as the arXiv collector delivers it. Left as a
 # plain dict rather than a strict model on purpose: it is UNTRUSTED
@@ -261,6 +265,35 @@ class ResearchQueryStateRead(BaseModel):
     elapsed_seconds: float | None = None
 
 
+class ResearchEnrichmentCounters(BaseModel):
+    """One run's funnel, as four numbers that mean four different things.
+
+        discovered -> distinct papers acquired across all searches
+        selected   -> survivors of the pre-filter and the candidate cap
+        judged     -> papers the semantic matcher actually returned on
+        matched    -> papers at or above the relevance threshold
+
+    They narrow monotonically and must never be substituted for one
+    another. Reporting `discovered` where `judged` belongs is precisely
+    how a run showed "34 papers" under semantic matching while its own
+    summary said 20 -- and `discovered` is a DISTINCT count, never the
+    sum of per-query totals, because a paper found by two searches is one
+    paper.
+
+    Every field defaults to 0 so a row written before counters existed
+    (`counters == {}`) deserializes rather than 500ing. Zeros there mean
+    "not recorded", which the client distinguishes by the run predating
+    the feature, not by the numbers themselves.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    discovered: int = 0
+    selected: int = 0
+    judged: int = 0
+    matched: int = 0
+
+
 class ResearchEnrichmentRead(BaseModel):
     """One enrichment job, for polling."""
 
@@ -284,6 +317,37 @@ class ResearchEnrichmentRead(BaseModel):
     # per-query tracking, which is why the client must treat it as
     # optional detail rather than the source of overall status.
     query_states: list[ResearchQueryStateRead] = Field(default_factory=list)
+    # WHY this run ended as it did. None for an ordinary success with
+    # matches, and for rows written before outcome reasons existed.
+    outcome_reason: ResearchOutcomeReason | None = None
+    counters: ResearchEnrichmentCounters = Field(
+        default_factory=ResearchEnrichmentCounters
+    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_retryable(self) -> bool:
+        """Whether offering the user a retry could plausibly change this.
+
+        COMPUTED HERE, NOT IN THE BROWSER. The rule is business logic
+        about the outcome taxonomy, and a frontend reimplementing it
+        would drift the moment a reason is added. A run with no reason is
+        not retryable: either it succeeded outright, or it predates the
+        taxonomy and guessing would be worse than a missing button.
+        """
+        return self.outcome_reason is not None and self.outcome_reason.is_retryable
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_success(self) -> bool:
+        """Whether this run produced a usable answer.
+
+        Derived from `status` first: SUCCEEDED is the authority, and the
+        reason only adds nuance to it. A zero-match run and a partial
+        acquisition are both successes -- rendering either as a failure
+        is the bug this field exists to prevent.
+        """
+        return self.status is ResearchEnrichmentStatus.SUCCEEDED
 
     @property
     def searches_total(self) -> int:

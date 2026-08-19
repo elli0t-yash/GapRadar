@@ -26,12 +26,14 @@ from app.db.models import (
     Signal,
     Source,
 )
-from app.domain.enums import ResearchEnrichmentStatus
+from app.domain.enums import ResearchEnrichmentStatus, ResearchOutcomeReason
+from app.integrations.openai.query_generator import _clean_queries
 from app.research_intelligence.acquisition import (
     ResearchCollectionError,
     ResearchCollectionResult,
     SequenceResearchCollector,
 )
+from app.research_intelligence.candidates import DEFAULT_CANDIDATE_LIMIT
 from app.research_intelligence.enrichment import (
     ResearchPlanRejectedError,
     active_enrichment,
@@ -42,8 +44,15 @@ from app.research_intelligence.enrichment import (
 )
 from app.research_intelligence.execution import run_searches_concurrently
 from app.research_intelligence.matching import ResearchMatchVerdict
-from app.research_intelligence.query_generation import ConceptQueryGenerator
-from app.research_intelligence.schemas import ResearchQueryPlan
+from app.research_intelligence.query_generation import (
+    ConceptQueryGenerator,
+    ResearchQueryProviderError,
+)
+from app.research_intelligence.schemas import (
+    MarketContext,
+    ResearchEnrichmentRead,
+    ResearchQueryPlan,
+)
 from app.research_intelligence.service import market_context_from_signal
 from tests.opportunity_engine.conftest import make_signal
 from tests.opportunity_engine.test_service import open_incident
@@ -884,3 +893,464 @@ def test_reconciliation_never_touches_a_fresh_running_job(
 
     db_session.refresh(job)
     assert job.status is ResearchEnrichmentStatus.RUNNING
+
+
+# -- the counter funnel, and what each number is allowed to mean ------------
+#
+# discovered >= selected >= judged >= matched, and no two of them may be
+# substituted for one another. The regressions pinned here are the exact
+# confusions that shipped: a per-query SUM rendered as a distinct paper
+# count, and an empty semantic result rendered as "no relevant research"
+# when the judge had in fact never answered.
+
+
+class CountingMatcher:
+    """Judges papers, and can fail on some or all of them.
+
+    Implements ReportsJudgingFailures, so orchestration can tell a judge
+    that FAILED from one that merely declined -- the distinction the
+    whole semantic-outage rule rests on.
+    """
+
+    def __init__(
+        self, *, score: float = 88.0, fail_after: int | None = None
+    ) -> None:
+        self.score = score
+        self.fail_after = fail_after
+        self.judged = 0
+        self._failures = 0
+
+    @property
+    def failures(self) -> int:
+        return self._failures
+
+    def judge(self, **_: Any) -> ResearchMatchVerdict | None:
+        if self.fail_after is not None and self.judged >= self.fail_after:
+            # A provider outage: no opinion, and an honest admission that
+            # this is a failure rather than a verdict of irrelevance.
+            self._failures += 1
+            return None
+        self.judged += 1
+        return ResearchMatchVerdict(
+            relevance_score=self.score,
+            matched_concepts=["urban freight"],
+            match_reason="Directly addresses on-demand freight allocation.",
+            technical_readiness_score=None,
+        )
+
+
+def collector_with_overlap(
+    plan_queries: list[str], *, unique: int, shared: int
+) -> SlowCollector:
+    """A collector where several queries return SOME OF THE SAME papers.
+
+    This is what makes the distinct-vs-summed distinction testable: the
+    per-query totals deliberately add up to more than the number of real
+    papers.
+    """
+    unique_ids = [f"2609.{i:05d}" for i in range(unique)]
+    shared_ids = unique_ids[:shared]
+    return SlowCollector(
+        {
+            plan_queries[0]: papers(*unique_ids),
+            plan_queries[1]: papers(*shared_ids),
+            plan_queries[2]: papers(*shared_ids),
+        }
+    )
+
+
+def test_discovered_is_distinct_and_never_the_per_query_sum(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """20 real papers must not be reported as 20 + 5 + 5.
+
+    The summed figure is what put "34 papers" on screen for a run whose
+    own summary said 20.
+    """
+    signal = cargo_signal(db_session, source, run)
+    plan = plan_for(db_session, signal)
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    collector = collector_with_overlap(list(plan.queries), unique=20, shared=5)
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector,
+        matcher=CountingMatcher(),
+    )
+
+    summed = sum(state["papers_returned"] for state in finished.query_states)
+    assert summed == 30, "the fixture must actually overlap for this to prove anything"
+    assert finished.counters["discovered"] == 20
+    assert finished.counters["discovered"] != summed
+
+
+def test_the_candidate_cap_separates_selected_from_discovered(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """20 discovered, cap 18, so 18 selected and 18 judged."""
+    signal = cargo_signal(db_session, source, run)
+    plan = plan_for(db_session, signal)
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    matcher = CountingMatcher()
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector_with_overlap(list(plan.queries), unique=20, shared=5),
+        matcher=matcher,
+    )
+
+    counters = finished.counters
+    assert counters["discovered"] == 20
+    assert counters["selected"] == DEFAULT_CANDIDATE_LIMIT == 18
+    assert counters["judged"] == 18
+    assert matcher.judged == 18
+    # Monotonic narrowing is the invariant the UI depends on.
+    assert (
+        counters["discovered"]
+        >= counters["selected"]
+        >= counters["judged"]
+        >= counters["matched"]
+    )
+
+
+def test_judged_papers_with_zero_matches_is_an_honest_success(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """THE REGRESSION PIN: 20/18/18/0 is a result, not a failure.
+
+    Every paper was judged and every one scored below the bar. That is an
+    answer, and rendering it as a failure -- with a Retry button that
+    would produce the identical answer -- is the bug.
+    """
+    signal = cargo_signal(db_session, source, run)
+    plan = plan_for(db_session, signal)
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector_with_overlap(list(plan.queries), unique=20, shared=5),
+        # Judges everything, accepts nothing.
+        matcher=CountingMatcher(score=10.0),
+    )
+
+    assert finished.status is ResearchEnrichmentStatus.SUCCEEDED
+    assert finished.outcome_reason is ResearchOutcomeReason.NO_RELEVANT_RESEARCH
+    assert finished.outcome_reason.is_retryable is False
+    assert finished.outcome_reason.is_success is True
+    assert finished.counters == {
+        "discovered": 20,
+        "selected": 18,
+        "judged": 18,
+        "matched": 0,
+    }
+
+
+def test_a_total_semantic_outage_is_a_failure_not_an_empty_result(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """THE OTHER PIN: 20/18/0 with judging failures is FAILED.
+
+    Identical counters to a zero-match success except for `judged`, and
+    the opposite meaning. Calling it "no relevant research" would report
+    a verdict the judge never gave.
+    """
+    signal = cargo_signal(db_session, source, run)
+    plan = plan_for(db_session, signal)
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector_with_overlap(list(plan.queries), unique=20, shared=5),
+        # Fails on the very first paper and every one after it.
+        matcher=CountingMatcher(fail_after=0),
+    )
+
+    assert finished.status is ResearchEnrichmentStatus.FAILED
+    assert finished.outcome_reason is ResearchOutcomeReason.SEMANTIC_MATCHING_FAILED
+    assert finished.outcome_reason.is_retryable is True
+    # Counters earned before the outage are preserved, never zeroed.
+    assert finished.counters["discovered"] == 20
+    assert finished.counters["selected"] == 18
+    assert finished.counters["judged"] == 0
+
+
+def test_a_partial_semantic_outage_keeps_the_verdicts_it_earned(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """7 real judgements are not discarded because the 8th failed."""
+    signal = cargo_signal(db_session, source, run)
+    plan = plan_for(db_session, signal)
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector_with_overlap(list(plan.queries), unique=20, shared=5),
+        matcher=CountingMatcher(fail_after=7),
+    )
+
+    # Real research was produced, so the run succeeded.
+    assert finished.status is ResearchEnrichmentStatus.SUCCEEDED
+    assert finished.counters["judged"] == 7
+    assert finished.counters["matched"] == 7
+    # And `selected` still records what was ATTEMPTED, so the shortfall
+    # stays visible rather than looking like a smaller candidate set.
+    assert finished.counters["selected"] == 18
+
+
+def test_counters_survive_a_fresh_database_session(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """A user returning later must see the same funnel."""
+    signal = cargo_signal(db_session, source, run)
+    plan = plan_for(db_session, signal)
+    job, _ = start_enrichment(db_session, signal=signal)
+    execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector_with_overlap(list(plan.queries), unique=20, shared=5),
+        matcher=CountingMatcher(),
+    )
+    db_session.expunge_all()
+
+    reloaded = db_session.get(ResearchEnrichmentRun, job.id)
+    assert reloaded is not None
+    assert reloaded.counters["discovered"] == 20
+    assert reloaded.counters["selected"] == 18
+
+
+def test_an_old_row_without_counters_or_reason_still_serializes(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """Rows written before this feature must not 500 the status endpoint."""
+    signal = cargo_signal(db_session, source, run)
+    legacy = ResearchEnrichmentRun(
+        signal_id=signal.id,
+        status=ResearchEnrichmentStatus.SUCCEEDED,
+        counters={},
+        outcome_reason=None,
+    )
+    db_session.add(legacy)
+    db_session.commit()
+
+    read = ResearchEnrichmentRead.model_validate(legacy)
+
+    assert read.counters.discovered == 0
+    assert read.counters.matched == 0
+    assert read.outcome_reason is None
+    # No reason means no basis for offering a retry.
+    assert read.is_retryable is False
+    assert read.is_success is True
+
+
+# -- the two-stage query plan ----------------------------------------------
+
+
+class SpyFallback:
+    """Stands in for the LLM query generator and records whether it ran."""
+
+    def __init__(self, plan: ResearchQueryPlan | None = None, raises=None) -> None:
+        self.plan = plan
+        self.raises = raises
+        self.calls = 0
+
+    def generate(self, context: Any) -> ResearchQueryPlan:
+        self.calls += 1
+        if self.raises is not None:
+            raise self.raises
+        assert self.plan is not None
+        return self.plan
+
+
+def unmatched_signal(db_session: Session, source: Source, run: Any) -> Signal:
+    """A problem whose wording hits no research vocabulary at all.
+
+    Verified against the real generator: this one produces a
+    concepts-are-all-industry-fallback plan and is refused by the gate.
+    "salons losing walk-in customers" is NOT such a problem -- it maps
+    onto customer-behaviour vocabulary and passes -- which is why the
+    wording here is deliberate rather than illustrative.
+    """
+    return make_signal(
+        db_session,
+        source,
+        run,
+        title="Why is it hard to find a good barber nearby?",
+        industry="Beauty",
+    )
+
+
+def test_a_good_deterministic_plan_never_reaches_the_fallback(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """The model is a cost, and is only paid when the free path fails."""
+    signal = cargo_signal(db_session, source, run)
+    fallback = SpyFallback(
+        ResearchQueryPlan(
+            signal_id=signal.id, queries=["a b", "c d", "e f"], concepts=["x"]
+        )
+    )
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector_for(db_session, signal, "2608.99001"),
+        matcher=AlwaysMatcher(),
+        fallback_generator=fallback,
+    )
+
+    assert fallback.calls == 0
+
+
+def test_a_rejected_deterministic_plan_is_rescued_by_the_fallback(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """The dead end this whole stage exists to remove."""
+    signal = unmatched_signal(db_session, source, run)
+    rescued = ResearchQueryPlan(
+        signal_id=signal.id,
+        queries=[
+            "appointment scheduling optimization",
+            "demand forecasting retail footfall",
+            "queueing theory service capacity",
+        ],
+        concepts=["appointment scheduling", "demand forecasting"],
+    )
+    fallback = SpyFallback(rescued)
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=SlowCollector({query: [] for query in rescued.queries}),
+        matcher=AlwaysMatcher(),
+        fallback_generator=fallback,
+    )
+
+    assert fallback.calls == 1
+    assert finished.status is ResearchEnrichmentStatus.SUCCEEDED
+
+
+def test_a_rejected_fallback_spends_nothing_and_is_not_retryable(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """Both stages declined: no provider call, and no misleading button."""
+    signal = unmatched_signal(db_session, source, run)
+    # A plan built from the industry name alone -- exactly what the gate
+    # exists to refuse, whoever produced it.
+    junk = ResearchQueryPlan(
+        signal_id=signal.id,
+        queries=[
+            "beauty systems",
+            "beauty systems optimization",
+            "beauty systems forecasting",
+        ],
+        concepts=["beauty systems"],
+    )
+    fallback = SpyFallback(junk)
+    collector = SlowCollector({})
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector,
+        matcher=AlwaysMatcher(),
+        fallback_generator=fallback,
+    )
+
+    assert finished.status is ResearchEnrichmentStatus.FAILED
+    assert finished.outcome_reason is ResearchOutcomeReason.QUERY_PLAN_UNAVAILABLE
+    assert finished.outcome_reason.is_retryable is False
+    # THE COST ASSERTION: not one search was run.
+    assert collector.searched == []
+
+
+def test_a_fallback_provider_outage_is_retryable(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    """The plan was never judged on its merits, so a retry can differ."""
+    signal = unmatched_signal(db_session, source, run)
+    collector = SlowCollector({})
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector,
+        matcher=AlwaysMatcher(),
+        fallback_generator=SpyFallback(raises=ResearchQueryProviderError("timeout")),
+    )
+
+    assert finished.status is ResearchEnrichmentStatus.FAILED
+    assert (
+        finished.outcome_reason
+        is ResearchOutcomeReason.QUERY_GENERATION_PROVIDER_ERROR
+    )
+    assert finished.outcome_reason.is_retryable is True
+    assert collector.searched == []
+
+
+def test_no_fallback_configured_is_still_a_clean_dead_end(
+    db_session: Session, source: Source, run: Any
+) -> None:
+    signal = unmatched_signal(db_session, source, run)
+    collector = SlowCollector({})
+    job, _ = start_enrichment(db_session, signal=signal)
+
+    finished = execute_enrichment(
+        db_session,
+        enrichment_id=job.id,
+        collector=collector,
+        matcher=AlwaysMatcher(),
+    )
+
+    assert finished.outcome_reason is ResearchOutcomeReason.QUERY_PLAN_UNAVAILABLE
+    assert collector.searched == []
+
+
+# -- the LLM adapter's own validation, with no network ----------------------
+
+
+@pytest.mark.parametrize(
+    ("queries", "why"),
+    [
+        (["urban freight routing"] * 3, "identical queries"),
+        (
+            ["urban freight routing", "routing urban freight", "freight urban routing"],
+            "word-order near-duplicates",
+        ),
+        (["beauty systems", "beauty system", "beauty tech"], "industry-name fallback"),
+        (
+            ["scalable saas platform", "enterprise revenue growth", "best product"],
+            "marketing language",
+        ),
+        (
+            [
+                "a system that helps salons keep their walk in customers on weekends",
+                "appointment scheduling optimization",
+                "queueing theory",
+            ],
+            "a sentence rather than a query",
+        ),
+    ],
+)
+def test_the_fallback_rejects_unusable_queries(
+    queries: list[str], why: str
+) -> None:
+    """Every rejection here is a Bright Data job that is never bought."""
+    context = MarketContext(
+        signal_id=uuid.uuid4(),
+        problem="Why is it hard to find a good barber nearby?",
+        description="People cannot find a nearby barber with open slots.",
+        industry="Beauty",
+    )
+
+    kept = _clean_queries(queries, context)
+
+    assert len(kept) < 3, f"{why} should not survive validation"

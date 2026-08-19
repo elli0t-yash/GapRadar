@@ -456,3 +456,23 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* A completed scan that found nothing above the threshold. Success
+   styling, deliberately: the run worked, and the answer is "none". Any
+   error treatment here would report a failure that did not happen. */
+.research-notice.is-complete {
+  border: 1px solid var(--accent-border, #ffd0ad);
+  background: var(--bg, #fffaf5);
+}
+
+/* A dead end: no search specific enough could be formed. Calm and
+   neutral -- nothing failed, and there is no action to offer. */
+.research-notice.is-dead-end {
+  border: 1px dashed var(--accent-border, #ffd0ad);
+  background: var(--bg, #fffaf5);
+}
+
+.research-notice.is-dead-end .research-notice-title,
+.research-notice.is-complete .research-notice-title {
+  color: var(--text-h, #3a1e00);
+}

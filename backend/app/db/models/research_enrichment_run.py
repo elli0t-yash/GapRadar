@@ -9,7 +9,7 @@ from sqlalchemy.types import JSON
 
 from app.db.base import Base
 from app.db.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
-from app.domain.enums import ResearchEnrichmentStatus
+from app.domain.enums import ResearchEnrichmentStatus, ResearchOutcomeReason
 
 if TYPE_CHECKING:
     from app.db.models.signal import Signal
@@ -111,6 +111,37 @@ class ResearchEnrichmentRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         default=list,
         server_default=text("'[]'"),
+    )
+    # WHY this run ended as it did, as a value the frontend can branch on.
+    # NULL for an ordinary success with matches, and for rows written
+    # before outcome reasons existed. Never the thing that decides
+    # SUCCEEDED vs FAILED -- `status` remains that -- only why.
+    outcome_reason: Mapped[ResearchOutcomeReason | None] = mapped_column(
+        Enum(
+            ResearchOutcomeReason,
+            name="research_outcome_reason",
+            native_enum=False,
+            length=48,
+        )
+    )
+    # The four counts that describe one run's funnel, persisted because
+    # THREE OF THEM ARE NOT DERIVABLE from anything else afterwards.
+    #
+    #   discovered -> distinct papers acquired across all searches
+    #   selected   -> survivors of the lexical pre-filter and the cap
+    #   judged     -> papers the semantic matcher actually returned on
+    #   matched    -> papers at or above the relevance threshold
+    #
+    # Only `matched` has a table of its own; rejected verdicts are not
+    # persisted, so without this the UI can only ever report "discovered"
+    # and is forced to mislabel it. That mislabelling is exactly how a
+    # run showed "34 papers" under "Semantic matching" while its own
+    # summary said 20 were reviewed.
+    counters: Mapped[dict[str, int]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
     )
 
     signal: Mapped["Signal"] = relationship()

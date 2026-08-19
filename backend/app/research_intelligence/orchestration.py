@@ -44,6 +44,7 @@ from app.research_intelligence.execution import (
 from app.research_intelligence.matching import (
     DEFAULT_MATCH_POLICY,
     ConceptOverlapMatcher,
+    ReportsJudgingFailures,
     ResearchMatchPolicy,
     ResearchMatchVerdict,
     SemanticMatcher,
@@ -108,6 +109,11 @@ class ResearchEnrichmentResult(BaseModel):
     # Judged, but scored below the threshold. Counted so a run that
     # produces no matches is distinguishable from one that judged nothing.
     matches_rejected: int = 0
+    # How many times the MATCHER itself failed, as distinct from how many
+    # papers it declined. Zero for a deterministic matcher, which cannot
+    # fail. Non-zero is the only honest evidence that a run's empty
+    # result says nothing about the research.
+    judging_failures: int = 0
 
     @property
     def failed_queries(self) -> list[str]:
@@ -227,6 +233,7 @@ def enrich_opportunity_with_research(
         len(candidates),
         len(papers),
     )
+    failures_before = _judging_failures(matcher)
     created, updated, rejected = _judge_and_persist(
         session,
         signal_id=signal.id,
@@ -250,6 +257,7 @@ def enrich_opportunity_with_research(
         matches_created=created,
         matches_updated=updated,
         matches_rejected=rejected,
+        judging_failures=_judging_failures(matcher) - failures_before,
     )
     logger.info(
         "opportunity_research_enriched",
@@ -377,6 +385,13 @@ def _run_searches(
         len(paper_ids),
     )
     return outcomes, paper_ids
+
+
+def _judging_failures(matcher: SemanticMatcher) -> int:
+    """How many times this matcher has failed, or 0 if it cannot say."""
+    if isinstance(matcher, ReportsJudgingFailures):
+        return matcher.failures
+    return 0
 
 
 def _load_papers(

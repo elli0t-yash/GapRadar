@@ -2,13 +2,11 @@ import type {
   ResearchEnrichmentStatus,
   ResearchIntelligence,
   ResearchPaperMatch,
+  ResearchEnrichmentCounters,
+  ResearchOutcomeReason,
   ResearchQueryState,
 } from "../api/types";
-import {
-  completedSearchCount,
-  papersSoFar,
-  unfinishedSearchCount,
-} from "../api/types";
+import { completedSearchCount, unfinishedSearchCount } from "../api/types";
 import "./ResearchSection.css";
 
 /**
@@ -99,14 +97,6 @@ function PaperCard({ paper }: { paper: ResearchPaperMatch }) {
   );
 }
 
-function ResearchNotice({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="research-notice">
-      <p className="research-notice-title">{title}</p>
-      <p className="research-notice-body">{body}</p>
-    </div>
-  );
-}
 
 /**
  * The call to action for an opportunity nobody has analysed yet, and the
@@ -144,16 +134,54 @@ function Stage({
   );
 }
 
+/**
+ * The zero-match sentence, built from whichever counts are real.
+ *
+ * Old runs carry `counters={}` (all zeros) because they predate the
+ * funnel, so the discovered count falls back to the read model rather
+ * than confidently printing "0 papers". When discovery and review are
+ * the same number there is nothing to contrast, and repeating it twice
+ * reads as a mistake — so that sentence collapses.
+ */
+function describeZeroMatch(
+  counters: ResearchEnrichmentCounters,
+  fallbackDiscovered: number,
+): string {
+  const discovered = counters.discovered || fallbackDiscovered;
+  const reviewed = counters.judged;
+
+  if (reviewed > 0 && discovered > reviewed) {
+    return `We discovered ${discovered} unique papers and semantically reviewed the ${reviewed} strongest candidates. None crossed the relevance threshold.`;
+  }
+  if (reviewed > 0) {
+    return `We reviewed ${reviewed} research candidate${
+      reviewed === 1 ? "" : "s"
+    }, but none crossed the relevance threshold.`;
+  }
+  return `We discovered ${discovered} paper${
+    discovered === 1 ? "" : "s"
+  }, but none crossed the relevance threshold.`;
+}
+
 function AnalyseResearchPanel({
   status,
   error,
   queryStates,
+  counters,
+  outcomeReason,
+  isRetryable,
   starting,
   onAnalyse,
 }: {
   status: ResearchEnrichmentStatus | null;
   error: string | null;
   queryStates: readonly ResearchQueryState[];
+  /** Backend funnel. Never derived from per-query sums. */
+  counters: ResearchEnrichmentCounters;
+  /** Typed reason from the backend. Never parsed from `error`. */
+  outcomeReason: ResearchOutcomeReason | null;
+  /** Backend-computed. The sole gate on the Retry button. */
+  isRetryable: boolean;
   /** A POST is in flight. The button is disabled before any status exists. */
   starting: boolean;
   onAnalyse: () => void;
@@ -164,8 +192,11 @@ function AnalyseResearchPanel({
     const total = queryStates.length;
     const complete = completedSearchCount(queryStates);
     const unfinished = unfinishedSearchCount(queryStates);
-    const papers = papersSoFar(queryStates);
     const searchesDone = total > 0 && complete === total;
+    // Straight from the backend. `queryStates[].papers_returned` is
+    // diagnostic only and must never be summed into this.
+    const { discovered, selected, judged } = counters;
+    const reviewStarted = selected > 0;
 
     return (
       <div className="research-notice is-working" aria-live="polite">
@@ -185,15 +216,32 @@ function AnalyseResearchPanel({
             detail={total > 0 ? `${complete}/${total} complete` : "waiting"}
           />
           <Stage
-            label="Semantic matching"
-            state={searchesDone ? "active" : "waiting"}
-            detail={searchesDone ? `${papers} papers` : "waiting"}
+            label="Papers discovered"
+            state={discovered > 0 ? "done" : searchesDone ? "done" : "waiting"}
+            detail={
+              searchesDone || discovered > 0 ? `${discovered} unique` : "waiting"
+            }
+          />
+          <Stage
+            label="Semantic review"
+            // "0/0 reviewed" before judging begins reads as a finished
+            // stage that found nothing, so it stays "waiting" until the
+            // backend has actually selected candidates.
+            state={
+              reviewStarted && judged >= selected
+                ? "done"
+                : reviewStarted
+                  ? "active"
+                  : "waiting"
+            }
+            detail={reviewStarted ? `${judged}/${selected} reviewed` : "waiting"}
           />
           <Stage
             label="Saving intelligence"
             state="waiting"
             detail="waiting"
           />
+
         </ul>
         {unfinished > 0 && (
           <p className="research-notice-warning">
@@ -209,20 +257,44 @@ function AnalyseResearchPanel({
   }
 
   if (status === "failed") {
+    // A DEAD END, not a fault. Both generators were asked and neither
+    // could form a search specific enough to be worth running. Retrying
+    // feeds the identical text to the identical deterministic generator,
+    // so no button is offered and nothing implies a provider broke.
+    if (outcomeReason === "query_plan_unavailable") {
+      return (
+        <div className="research-notice is-dead-end">
+          <p className="research-notice-title">
+            No research search could be formed
+          </p>
+          <p className="research-notice-body">
+            We couldn&rsquo;t form a sufficiently specific research search for
+            this problem. It would need more technical detail about the
+            underlying difficulty before we can match it to published work.
+          </p>
+        </div>
+      );
+    }
+
     return (
       <div className="research-notice is-error">
         <p className="research-notice-title">Research analysis did not complete</p>
         <p className="research-notice-body">
           {error ?? "The analysis could not be completed."}
         </p>
-        <button
-          type="button"
-          className="research-retry"
-          onClick={onAnalyse}
-          disabled={starting}
-        >
-          Try again
-        </button>
+        {/* THE ONLY CONDITION. Never `status === "failed"`, never the
+            presence of `error`, never a match on the reason name — the
+            backend owns this rule and computes it for us. */}
+        {isRetryable && (
+          <button
+            type="button"
+            className="research-retry"
+            onClick={onAnalyse}
+            disabled={starting}
+          >
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -258,6 +330,9 @@ export function ResearchSection({
   enrichmentStatus,
   enrichmentError,
   enrichmentQueryStates,
+  enrichmentCounters,
+  enrichmentOutcomeReason,
+  enrichmentIsRetryable,
   enrichmentStarting,
   enrichmentWarning,
   onAnalyse,
@@ -274,6 +349,12 @@ export function ResearchSection({
   enrichmentError: string | null;
   /** Backend-reported per-query progress. Never synthesised here. */
   enrichmentQueryStates: readonly ResearchQueryState[];
+  /** Backend funnel counters. */
+  enrichmentCounters: ResearchEnrichmentCounters;
+  /** Typed outcome from the backend. */
+  enrichmentOutcomeReason: ResearchOutcomeReason | null;
+  /** Backend-computed retryability. */
+  enrichmentIsRetryable: boolean;
   /** A POST is in flight, so the CTA must not accept another click. */
   enrichmentStarting: boolean;
   /** A partial run: research is real, and so is the gap. */
@@ -328,20 +409,27 @@ export function ResearchSection({
                 status={enrichmentStatus}
                 error={enrichmentError}
                 queryStates={enrichmentQueryStates}
+                counters={enrichmentCounters}
+                outcomeReason={enrichmentOutcomeReason}
+                isRetryable={enrichmentIsRetryable}
                 starting={enrichmentStarting}
                 onAnalyse={onAnalyse}
               />
             )}
 
-          {/* State 2: enrichment ran, nothing cleared the backend's bar. */}
+          {/* State 2: enrichment ran and nothing cleared the backend's
+              bar. A RESULT, not a failure: the searches ran, papers were
+              judged, and the honest answer is "none of these". Rendered
+              with success styling and no Retry — repeating an identical
+              scan produces an identical answer. */}
           {research.generated_queries.length > 0 &&
             research.matched_paper_count === 0 && (
-              <ResearchNotice
-                title="We searched for related research but found nothing relevant enough yet."
-                body={`${research.paper_count} paper${
-                  research.paper_count === 1 ? "" : "s"
-                } were reviewed and none met the relevance bar.`}
-              />
+              <div className="research-notice is-complete">
+                <p className="research-notice-title">Research scan complete</p>
+                <p className="research-notice-body">
+                  {describeZeroMatch(enrichmentCounters, research.paper_count)}
+                </p>
+              </div>
             )}
 
           {/* State 1: enriched, with accepted matches. */}

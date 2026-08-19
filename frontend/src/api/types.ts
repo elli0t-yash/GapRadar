@@ -333,6 +333,49 @@ export interface ResearchEnrichmentRead {
    * tracking, so treat it as optional detail rather than as status.
    */
   query_states: ResearchQueryState[];
+  /** WHY the run ended this way. Null for an ordinary success with
+   *  matches, and for runs predating the outcome taxonomy. */
+  outcome_reason: ResearchOutcomeReason | null;
+  /** The funnel. Zeros on runs that predate counters. */
+  counters: ResearchEnrichmentCounters;
+  /**
+   * Whether offering a retry could plausibly change anything.
+   *
+   * COMPUTED BY THE BACKEND. Never re-derive it here from status, from
+   * the presence of `error`, or by matching on `outcome_reason` — the
+   * taxonomy is backend business logic and a second copy would drift.
+   */
+  is_retryable: boolean;
+  /** Whether the run produced a usable answer. Backend-computed. */
+  is_success: boolean;
+}
+
+export type ResearchOutcomeReason =
+  | "no_relevant_research"
+  | "acquisition_partial"
+  | "query_plan_unavailable"
+  | "opportunity_missing"
+  | "query_generation_provider_error"
+  | "acquisition_failed"
+  | "semantic_matching_failed"
+  | "timeout"
+  | "interrupted"
+  | "unexpected_error";
+
+/**
+ * One run's funnel. Four numbers that mean four different things and
+ * narrow monotonically: discovered >= selected >= judged >= matched.
+ *
+ * `discovered` is a DISTINCT count from the backend. It is never the sum
+ * of per-query `papers_returned`, because a paper found by two searches
+ * is one paper — summing them is what once displayed "34 papers" for a
+ * run that had 20.
+ */
+export interface ResearchEnrichmentCounters {
+  discovered: number;
+  selected: number;
+  judged: number;
+  matched: number;
 }
 
 /** Lifecycle of ONE research query inside an enrichment. */
@@ -377,7 +420,9 @@ export function unfinishedSearchCount(
   ).length;
 }
 
-/** Papers acquired so far, across the searches that have returned. */
-export function papersSoFar(states: readonly ResearchQueryState[]): number {
-  return states.reduce((total, state) => total + state.papers_returned, 0);
-}
+// `papersSoFar` used to live here, summing `papers_returned` across
+// queries. It was WRONG as a paper count — the same paper returned by two
+// searches counted twice — and it was rendered as a semantic-review
+// total, conflating discovery with judging. Use
+// `ResearchEnrichmentRead.counters` instead; per-query `papers_returned`
+// remains available on `query_states` for diagnostics only.
