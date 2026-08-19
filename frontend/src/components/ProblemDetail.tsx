@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, NetworkError, isAbort } from "../api/client";
+import { ApiError, NetworkError } from "../api/client";
 import { getOpportunity, getOpportunityResearch } from "../api/opportunities";
 import { toProblem } from "../api/adapters";
 import type { ResearchIntelligence } from "../api/types";
@@ -20,9 +20,13 @@ function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
     return "Could not reach the API. Check the backend is running and that this origin is allowed.";
   }
+
   if (error instanceof ApiError) {
-    return error.isNotFound ? "This opportunity is not available." : error.message;
+    return error.isNotFound
+      ? "This opportunity is not available."
+      : error.message;
   }
+
   return "Something went wrong.";
 }
 
@@ -47,52 +51,81 @@ export function ProblemDetail({
 
   useEffect(() => {
     closeButtonRef.current?.focus();
+
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+      }
     }
+
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [onClose]);
 
-  // The card object is a cached row, not the authority. Refetch to confirm.
+  // The card object is a cached row, not the authority.
+  // Refetch to confirm.
+  //
+  // We deliberately use an active flag instead of aborting the request.
+  // React StrictMode mounts / cleans up / mounts effects again in development.
+  // Aborting during that cleanup causes Chrome DevTools to display a failed
+  // request even though the following request succeeds.
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
+
     setDetail(problem);
     setDetailError(null);
 
-    getOpportunity(problem.id, controller.signal)
-      .then((opportunity) => setDetail(toProblem(opportunity)))
+    getOpportunity(problem.id)
+      .then((opportunity) => {
+        if (!active) return;
+
+        setDetail(toProblem(opportunity));
+      })
       .catch((error) => {
-        if (isAbort(error)) return;
+        if (!active) return;
+
         setDetailError(describeError(error));
       });
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, [problem]);
 
   // Research is fetched separately so a failure here leaves the opportunity
   // detail fully usable.
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
+
     setResearchLoading(true);
     setResearchError(null);
 
-    getOpportunityResearch(problem.id, controller.signal)
+    getOpportunityResearch(problem.id)
       .then((intelligence) => {
+        if (!active) return;
+
         setResearch(intelligence);
         setResearchLoading(false);
       })
       .catch((error) => {
-        if (isAbort(error)) return;
+        if (!active) return;
+
         setResearch(null);
         setResearchError(describeError(error));
         setResearchLoading(false);
       });
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, [problem.id, researchAttempt]);
 
-  const retryResearch = useCallback(() => setResearchAttempt((n) => n + 1), []);
+  const retryResearch = useCallback(() => {
+    setResearchAttempt((n) => n + 1);
+  }, []);
 
   return (
     <div className="problem-detail-overlay" onClick={onClose}>
@@ -107,6 +140,7 @@ export function ProblemDetail({
           {detail.category && (
             <span className="problem-detail-tag">{detail.category}</span>
           )}
+
           <button
             ref={closeButtonRef}
             type="button"
@@ -133,8 +167,11 @@ export function ProblemDetail({
               <span aria-hidden="true">·</span>
             </>
           )}
+
           <span>{formatRelativeDate(detail.date)}</span>
+
           <span aria-hidden="true">·</span>
+
           {/* Not scorable is a backend answer, never a zero. */}
           <span>
             {detail.signal === null
@@ -143,19 +180,25 @@ export function ProblemDetail({
           </span>
         </div>
 
-        <p className="problem-detail-description">{detail.description}</p>
+        <p className="problem-detail-description">
+          {detail.description}
+        </p>
 
         <dl className="problem-detail-scores">
           {detail.scores.itch !== null && (
             <div className="problem-detail-score">
               <dt>Itch</dt>
+
               <dd>
                 <div className="problem-detail-score-bar">
                   <div
                     className="problem-detail-score-fill"
-                    style={{ width: `${detail.scores.itch}%` }}
+                    style={{
+                      width: `${detail.scores.itch}%`,
+                    }}
                   />
                 </div>
+
                 <span>{detail.scores.itch}/100</span>
               </dd>
             </div>
@@ -163,17 +206,25 @@ export function ProblemDetail({
 
           {SCORE_LABELS.map(({ key, label }) => {
             const value = detail.scores[key];
-            if (value === null) return null;
+
+            if (value === null) {
+              return null;
+            }
+
             return (
               <div className="problem-detail-score" key={key}>
                 <dt>{label}</dt>
+
                 <dd>
                   <div className="problem-detail-score-bar">
                     <div
                       className="problem-detail-score-fill"
-                      style={{ width: `${(value / 10) * 100}%` }}
+                      style={{
+                        width: `${(value / 10) * 100}%`,
+                      }}
                     />
                   </div>
+
                   <span>{value}/10</span>
                 </dd>
               </div>
