@@ -1,5 +1,11 @@
-import { apiGet } from "./client";
-import type { Opportunity, ResearchIntelligence, UUID } from "./types";
+import { apiGet, apiPost } from "./client";
+import type {
+  Opportunity,
+  ResearchEnrichmentAccepted,
+  ResearchEnrichmentRead,
+  ResearchIntelligence,
+  UUID,
+} from "./types";
 
 /**
  * The Discover feed. 200 is the backend's hard maximum and returns the whole
@@ -42,6 +48,41 @@ export function getOpportunityResearch(
 ): Promise<ResearchIntelligence> {
   return apiGet<ResearchIntelligence>(
     `/opportunities/${encodeURIComponent(signalId)}/research`,
+    { signal },
+  );
+}
+
+/**
+ * Ask the backend to find research for one opportunity.
+ *
+ * THE ONLY CALL THAT SPENDS A PROVIDER RUN, and it must only ever be made
+ * from an explicit user action -- never from an effect, never on mount.
+ * Returns 202 immediately; the work happens server-side.
+ *
+ * `already_running` and `already_enriched` are both SUCCESS answers.
+ */
+export function startResearchEnrichment(
+  signalId: UUID,
+  signal?: AbortSignal,
+): Promise<ResearchEnrichmentAccepted> {
+  return apiPost<ResearchEnrichmentAccepted>(
+    `/opportunities/${encodeURIComponent(signalId)}/research/enrich`,
+    { signal },
+  );
+}
+
+/**
+ * Where this opportunity's most recent analysis has got to.
+ *
+ * Read-only and safe to poll. Resolves to null when analysis has never
+ * been requested.
+ */
+export function getResearchEnrichment(
+  signalId: UUID,
+  signal?: AbortSignal,
+): Promise<ResearchEnrichmentRead | null> {
+  return apiGet<ResearchEnrichmentRead | null>(
+    `/opportunities/${encodeURIComponent(signalId)}/research/enrichment`,
     { signal },
   );
 }

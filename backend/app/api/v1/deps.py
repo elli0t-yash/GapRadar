@@ -60,3 +60,29 @@ def get_pipeline_scheduler() -> PipelineScheduler:
 
 
 Scheduler = Annotated[PipelineScheduler, Depends(get_pipeline_scheduler)]
+
+
+# Callable that takes a claimed research-enrichment id and arranges for it
+# to run out of band. Returns immediately; it never does the work.
+ResearchEnrichmentScheduler = Callable[[uuid.UUID], None]
+
+
+def get_research_enrichment_scheduler() -> ResearchEnrichmentScheduler:
+    """How the API hands a claimed enrichment to the local executor.
+
+    A dependency rather than a direct import for the same reason as the
+    pipeline scheduler: a test substitutes a recorder and proves the route
+    returned WITHOUT spending a Bright Data job or an LLM call, which is
+    the property the 202 exists to establish.
+
+    Imported inside the function so the provider adapters are never pulled
+    in while this module is still loading.
+    """
+    from app.research_intelligence.background import execute_research_enrichment
+
+    return execute_research_enrichment
+
+
+EnrichmentScheduler = Annotated[
+    ResearchEnrichmentScheduler, Depends(get_research_enrichment_scheduler)
+]

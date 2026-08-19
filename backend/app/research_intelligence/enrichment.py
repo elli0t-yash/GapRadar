@@ -17,8 +17,8 @@ quality gate, and the failure reporting around it.
 
 import logging
 import uuid
-from collections.abc import Callable
-from datetime import UTC, datetime
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -28,8 +28,15 @@ from app.db.models import ResearchEnrichmentRun, Signal
 from app.db.models.research_enrichment_run import ACTIVE_ENRICHMENT_STATUSES
 from app.domain.enums import ResearchEnrichmentStatus
 from app.research_intelligence.acquisition import ResearchCollector
+from app.research_intelligence.execution import (
+    RESEARCH_ACQUISITION_BUDGET_SECONDS,
+    ResearchQueryExecution,
+)
 from app.research_intelligence.matching import SemanticMatcher
-from app.research_intelligence.orchestration import enrich_opportunity_with_research
+from app.research_intelligence.orchestration import (
+    ResearchEnrichmentResult,
+    enrich_opportunity_with_research,
+)
 from app.research_intelligence.query_generation import (
     ConceptQueryGenerator,
     ResearchQueryGenerationError,
@@ -217,8 +224,7 @@ def start_enrichment(
 
     session.refresh(run)
     logger.info(
-        "research_enrichment_queued",
-        extra={"signal_id": str(signal.id), "enrichment_id": str(run.id)},
+        "[research-enrichment] queued id=%s signal=%s", run.id, signal.id
     )
     return run, False
 
@@ -234,6 +240,7 @@ def execute_enrichment(
     matcher: SemanticMatcher | None = None,
     generator: ResearchQueryGenerator | None = None,
     now: Callable[[], datetime] = _utcnow,
+    acquisition_budget_seconds: float = RESEARCH_ACQUISITION_BUDGET_SECONDS,
 ) -> ResearchEnrichmentRun:
     """Run one claimed enrichment to a terminal state.
 
@@ -258,6 +265,7 @@ def execute_enrichment(
     run.status = ResearchEnrichmentStatus.RUNNING
     run.started_at = now()
     session.commit()
+    logger.info("[research-enrichment] running id=%s", run.id)
 
     try:
         plan = build_plan(market_context_from_signal(signal), generator)
@@ -272,6 +280,19 @@ def execute_enrichment(
         # it declined to pad the plan. Same outcome, different author.
         return _fail(session, run, str(exc), now=now)
 
+    logger.info(
+        "[research-enrichment] generated %d queries id=%s", len(plan.queries), run.id
+    )
+    # Seed the per-query state so a client polling between RUNNING and the
+    # first search already sees the three queries as pending, rather than
+    # an empty list it would have to guess the shape of.
+    _publish_progress(
+        session,
+        run,
+        [ResearchQueryExecution(query=query) for query in plan.queries],
+    )
+
+    started = now()
     try:
         result = enrich_opportunity_with_research(
             session,
@@ -279,6 +300,8 @@ def execute_enrichment(
             collector=collector,
             generator=_FixedPlanGenerator(plan),
             matcher=matcher,
+            on_progress=lambda executions: _publish_progress(session, run, executions),
+            acquisition_budget_seconds=acquisition_budget_seconds,
         )
     except Exception as exc:
         # Anything the orchestration could not absorb. Per-query provider
@@ -288,21 +311,38 @@ def execute_enrichment(
         )
         return _fail(session, run, f"{type(exc).__name__}: {exc}", now=now)
 
+    # -- the partial-result policy ------------------------------------
+    #
+    # Every search failing is a failed enrichment: there is nothing to
+    # show and the user must be able to retry. But ONE search returning
+    # is enough to be useful, and discarding 25 real papers because a
+    # third query timed out would be the worst of both worlds -- money
+    # spent, nothing delivered.
+    if result.queries and not result.successful_queries:
+        return _fail(
+            session,
+            run,
+            _all_searches_failed_message(result),
+            now=now,
+            query_states=_states_from_result(result),
+        )
+
+    duration = round((now() - started).total_seconds(), 2)
     run.status = ResearchEnrichmentStatus.SUCCEEDED
     run.completed_at = now()
     run.error = None
+    # Set alongside SUCCEEDED, never instead of it.
+    run.warning = result.acquisition_warning
+    run.query_states = _states_from_result(result)
     session.commit()
     session.refresh(run)
     logger.info(
-        "research_enrichment_succeeded",
-        extra={
-            "enrichment_id": str(run.id),
-            "signal_id": str(run.signal_id),
-            "candidate_papers": result.candidate_paper_count,
-            "matches_created": result.matches_created,
-            "matches_updated": result.matches_updated,
-            "failed_queries": result.failed_queries,
-        },
+        "[research-enrichment] succeeded id=%s papers=%d matches=%d duration=%ss%s",
+        run.id,
+        result.candidate_paper_count,
+        result.matches_created + result.matches_updated,
+        duration,
+        f" warning={run.warning!r}" if run.warning else "",
     )
     return run
 
@@ -322,21 +362,150 @@ class _FixedPlanGenerator:
         return self._plan
 
 
+def _publish_progress(
+    session: Session,
+    run: ResearchEnrichmentRun,
+    executions: Sequence[ResearchQueryExecution],
+) -> None:
+    """Persist per-query progress so the browser can poll something true.
+
+    Called on the ORCHESTRATION's thread, never a search worker -- the
+    runner guarantees that, and it is what makes writing through this
+    Session safe.
+
+    Committed immediately and on its own: progress that is only visible
+    after the run finishes is not progress. A failure to write it is
+    logged and swallowed, because losing a progress tick must never fail
+    an enrichment that is otherwise going fine.
+    """
+    try:
+        run.query_states = [execution.to_state() for execution in executions]
+        session.commit()
+    except Exception:  # pragma: no cover - progress is best-effort
+        logger.warning(
+            "research_enrichment_progress_write_failed",
+            extra={"enrichment_id": str(run.id)},
+            exc_info=True,
+        )
+        session.rollback()
+
+
+def _states_from_result(result: ResearchEnrichmentResult) -> list[dict[str, object]]:
+    """Per-query state rebuilt from the finished orchestration result.
+
+    The final write comes from the result rather than the live executions
+    so the persisted state carries the post-ingestion paper counts, which
+    only exist once ingestion has run.
+    """
+    return [
+        {
+            "query": outcome.query,
+            "status": outcome.status.value,
+            "provider_job_id": outcome.provider_job_id,
+            "records_received": outcome.records_received,
+            "papers_returned": outcome.papers_returned,
+            "error": outcome.error,
+            "elapsed_seconds": outcome.elapsed_seconds,
+        }
+        for outcome in result.queries
+    ]
+
+
+def _all_searches_failed_message(result: ResearchEnrichmentResult) -> str:
+    """Why a run with no usable search is being failed.
+
+    Names the dominant reason so an operator can tell "the provider is
+    down" from "these queries are bad" without opening the logs.
+    """
+    total = len(result.queries)
+    timed_out = len(result.timed_out_queries)
+    if timed_out == total:
+        return (
+            f"all {total} research searches timed out before returning; "
+            "the provider jobs may still be running and this can be retried"
+        )
+    if timed_out:
+        return (
+            f"no research search returned: {timed_out} of {total} timed out and "
+            f"{total - timed_out} failed"
+        )
+    return f"all {total} research searches failed before returning any papers"
+
+
 def _fail(
     session: Session,
     run: ResearchEnrichmentRun,
     message: str,
     *,
     now: Callable[[], datetime],
+    query_states: list[dict[str, object]] | None = None,
 ) -> ResearchEnrichmentRun:
     """Close the enrichment as FAILED, keeping why."""
     run.status = ResearchEnrichmentStatus.FAILED
     run.completed_at = now()
     run.error = message
+    if query_states is not None:
+        run.query_states = query_states
     session.commit()
     session.refresh(run)
-    logger.warning(
-        "research_enrichment_failed_recorded",
-        extra={"enrichment_id": str(run.id), "reason": message},
-    )
+    logger.warning("[research-enrichment] failed id=%s reason=%s", run.id, message)
     return run
+
+
+# -- reconciliation ---------------------------------------------------------
+
+# How long an enrichment may stay active before it is considered
+# abandoned. Comfortably above the bounded acquisition budget plus a
+# semantic-matching pass, so a genuinely slow run is never killed by it;
+# the only rows this catches are ones whose executor no longer exists.
+STALE_ENRICHMENT_AFTER_SECONDS = 900.0
+
+
+def reconcile_stale_enrichments(
+    session: Session,
+    *,
+    now: Callable[[], datetime] = _utcnow,
+    stale_after_seconds: float = STALE_ENRICHMENT_AFTER_SECONDS,
+) -> int:
+    """Fail enrichments whose executor died, and return how many.
+
+    FastAPI BackgroundTasks live in the Uvicorn process. A reload, a
+    crash, or a deploy kills the wait while the Bright Data jobs carry on
+    remotely -- leaving a row RUNNING with nothing left to finish it. The
+    partial unique index then blocks the opportunity from ever being
+    enriched again, so a stuck row is not cosmetic: it permanently
+    disables the feature for that opportunity.
+
+    This is the reconciler for that, and it is deliberately the dumbest
+    one that works: age it out. It does NOT resume by provider job id --
+    that is a larger piece of work -- it just makes the row terminal so
+    the user can retry, which is the behaviour the UI needs.
+
+    Safe to call on every status read: it only touches rows older than
+    the budget, so an in-flight enrichment is never affected.
+    """
+    cutoff = now() - timedelta(seconds=stale_after_seconds)
+    stale = list(
+        session.execute(
+            select(ResearchEnrichmentRun).where(
+                ResearchEnrichmentRun.status.in_(ACTIVE_STATUSES),
+                ResearchEnrichmentRun.created_at < cutoff,
+            )
+        ).scalars()
+    )
+    for run in stale:
+        run.status = ResearchEnrichmentStatus.FAILED
+        run.completed_at = now()
+        run.error = (
+            "the worker running this enrichment stopped before it finished "
+            "(most likely a backend restart); no provider job was cancelled, "
+            "and this can be retried"
+        )
+        logger.warning(
+            "[research-enrichment] reconciled stale run id=%s signal=%s",
+            run.id,
+            run.signal_id,
+        )
+    if stale:
+        session.commit()
+    return len(stale)

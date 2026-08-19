@@ -160,6 +160,27 @@ class RecommendedAction(str, enum.Enum):
     ESCALATE = "escalate"
 
 
+class ResearchQueryStatus(str, enum.Enum):
+    """Lifecycle of ONE research query inside an enrichment, persisted.
+
+    Finer-grained than ResearchEnrichmentStatus on purpose. The enrichment
+    as a whole cannot honestly say "2 of 3 searches are done" unless each
+    search reports itself, and the frontend is forbidden from inventing
+    that progress with a timer -- so the backend has to be able to say it.
+
+    TIMED_OUT is deliberately distinct from FAILED. A provider job that
+    outran GapRadar's local patience is still running on Bright Data's
+    side and returned nothing to us; a FAILED one was refused or errored.
+    Collapsing them would hide the single most common demo failure.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+
+
 class ReliabilityState(str, enum.Enum):
     """A collector's CURRENT reliability, computed -- never persisted.
 

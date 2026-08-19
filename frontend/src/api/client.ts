@@ -94,6 +94,29 @@ export async function apiGet<T>(
   return body as T;
 }
 
+export async function apiPost<T>(
+  path: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_V1}${path}`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      signal: options.signal,
+    });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    throw new NetworkError("Could not reach the GapRadar API", cause);
+  }
+
+  const body: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    throw new ApiError(response.status, messageFrom(body, response.status), body);
+  }
+  return body as T;
+}
+
 /** True for a cancellation the app itself caused. Never an error state. */
 export function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";

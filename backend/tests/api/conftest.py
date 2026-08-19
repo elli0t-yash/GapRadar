@@ -14,7 +14,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.api.v1.deps import get_brightdata_client, get_pipeline_scheduler
+from app.api.v1.deps import (
+    get_brightdata_client,
+    get_pipeline_scheduler,
+    get_research_enrichment_scheduler,
+)
 from app.config import Settings
 from app.db.session import get_db
 from app.factory import create_app
@@ -69,10 +73,25 @@ def scheduler() -> RecordingScheduler:
 
 
 @pytest.fixture
+def enrichment_scheduler() -> RecordingScheduler:
+    """The research enrichments the API handed to the background executor.
+
+    Overridden for the same reason as the pipeline one: the real executor
+    opens its OWN session and its OWN provider clients, so it would bypass
+    the overrides below and reach the real database, Bright Data and the
+    LLM provider -- from a test, through TestClient's synchronous
+    BackgroundTasks. Recording the claim instead is also what makes "the
+    request did not do the work" an assertion rather than a hope.
+    """
+    return RecordingScheduler()
+
+
+@pytest.fixture
 def make_api_client(
     db_session: Session,
     brightdata_settings: Settings,
     scheduler: RecordingScheduler,
+    enrichment_scheduler: RecordingScheduler,
 ) -> Iterator[Callable[..., TestClient]]:
     """Build a TestClient over a given provider handler."""
     clients: list[BrightDataClient] = []
@@ -88,6 +107,9 @@ def make_api_client(
         app.dependency_overrides[get_db] = lambda: db_session
         app.dependency_overrides[get_brightdata_client] = lambda: provider
         app.dependency_overrides[get_pipeline_scheduler] = lambda: scheduler
+        app.dependency_overrides[get_research_enrichment_scheduler] = (
+            lambda: enrichment_scheduler
+        )
         return TestClient(app)
 
     yield build

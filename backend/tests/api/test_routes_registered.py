@@ -2,7 +2,8 @@
 
 Guards against a route module being written but never included, and
 against a CRUD surface quietly appearing: the frontend reads, and writes
-only by asking the pipeline to run.
+only by asking the pipeline to run or by advancing the explicitly isolated
+RecallGuard fixture replay.
 
 Asking the pipeline to run is a claim, not the work: POST answers 202
 with an execution id and the client polls GET /pipeline/runs/{id}. There
@@ -25,7 +26,13 @@ EXPECTED_PATHS = {
     ("GET", "/api/v1/opportunities"),
     ("GET", "/api/v1/opportunities/{signal_id}"),
     ("GET", "/api/v1/opportunities/{signal_id}/research"),
+    ("POST", "/api/v1/opportunities/{signal_id}/research/enrich"),
+    ("GET", "/api/v1/opportunities/{signal_id}/research/enrichment"),
     ("GET", "/api/v1/reliability"),
+    ("GET", "/api/v1/reliability/live-evidence"),
+    ("GET", "/api/v1/reliability/demo"),
+    ("POST", "/api/v1/reliability/demo/start"),
+    ("POST", "/api/v1/reliability/demo/advance"),
     ("GET", "/api/v1/reliability/incidents"),
     ("GET", "/api/v1/reliability/incidents/{incident_id}"),
     ("GET", "/api/v1/collectors"),

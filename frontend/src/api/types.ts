@@ -1,6 +1,7 @@
-// Transcribed from docs/frontend-backend-integration.md §7 and §9, which are
-// generated from the backend's OpenAPI document. Field names, types and
-// nullability match the API exactly — do not "tidy" them.
+// Product contracts are transcribed from docs/frontend-backend-integration.md
+// §7 and §9. The isolated Reliability demo types below mirror its explicit
+// backend response model. Field names, types and nullability match the API
+// exactly — do not "tidy" them.
 
 /** UUID, serialised as a string. */
 export type UUID = string;
@@ -101,4 +102,282 @@ export interface ApiErrorBody {
 /** 422 bodies use an ARRAY-valued detail — a different shape. */
 export interface ValidationErrorBody {
   detail: { loc: (string | number)[]; msg: string; type: string }[];
+}
+
+export interface ReliabilityDemoFieldHealth {
+  field: string;
+  baseline_pct: number;
+  current_pct: number;
+  drop_pct: number | null;
+  status: "healthy" | "drift" | "regression";
+}
+
+export interface ReliabilityDemoVerification {
+  field: string;
+  before_pct: number;
+  after_pct: number;
+  status: "pass" | "fail";
+}
+
+export interface ReliabilityDemoRepair {
+  attempt: number;
+  label: string;
+  status: "healing" | "verifying" | "rejected" | "approved";
+  changes: string[];
+  verification: ReliabilityDemoVerification[];
+}
+
+export interface ReliabilityDemoTimelineEvent {
+  at: ISODateTime;
+  event: string;
+  collector_run_id: UUID | null;
+  attempt: number | null;
+  detail: string | null;
+}
+
+export interface ReliabilityDemoProof {
+  schema_fidelity: "PASS" | "FAIL";
+  semantic_fidelity: "PASS" | "FAIL";
+  source_fidelity: "PASS" | "FAIL";
+  decision: "APPROVE" | "REJECT";
+}
+
+export interface ReliabilityDemo {
+  scenario: string;
+  mode: "fixture_replay";
+  session_id: UUID | null;
+  collector_id: UUID | null;
+  collector_name: string;
+  provider: string;
+  external_collector_id: string;
+  status:
+    | "healthy"
+    | "drift_detected"
+    | "healing"
+    | "verifying"
+    | "rejected"
+    | "self_healed";
+  core_status: string;
+  terminal: boolean;
+  incident_id: UUID | null;
+  classification: string | null;
+  severity: string | null;
+  confidence: number | null;
+  recommended_action: string | null;
+  affected_fields: string[];
+  field_health: ReliabilityDemoFieldHealth[];
+  repair_attempts: ReliabilityDemoRepair[];
+  timeline: ReliabilityDemoTimelineEvent[];
+  proof: ReliabilityDemoProof | null;
+  started_at: ISODateTime | null;
+  updated_at: ISODateTime | null;
+}
+
+export interface LiveEvidenceCollector {
+  collector_id: UUID;
+  name: string;
+  provider: string;
+  external_collector_id: string;
+}
+
+export interface LiveEvidenceRun {
+  collector_run_id: UUID;
+  provider_job_id: string;
+  status: string;
+  started_at: ISODateTime | null;
+  completed_at: ISODateTime | null;
+  fetched_record_count: number;
+  valid_record_count: number;
+  invalid_record_count: number;
+  accepted_record_count: number;
+}
+
+export interface LiveEvidenceInvalidRecord {
+  index: number | null;
+  problem: string | null;
+  field: string;
+  value: number;
+  allowed_min: number;
+  allowed_max: number;
+  reason: string;
+  detail: string | null;
+}
+
+export interface LiveEvidenceDetection {
+  incident_id: UUID;
+  detected_at: ISODateTime;
+  observed_record_count: number;
+  field: string;
+  classification: string;
+  severity: string | null;
+  confidence: number | null;
+  recommended_action: string;
+}
+
+export interface LiveEvidenceRepairAttempt {
+  attempt: number;
+  status: string;
+  provider_status: string | null;
+  has_diff: boolean | null;
+  preview_records: number | null;
+  preview_valid_records: number | null;
+  preview_invalid_records: number | null;
+  deployed: boolean;
+  patch_available: boolean;
+  before_logic: string | null;
+  after_logic: string | null;
+  note: string | null;
+}
+
+export interface LiveEvidenceVerificationSample {
+  problem: string;
+  tam_score: number;
+}
+
+export interface LiveEvidenceFailedCheck {
+  name: string;
+  expected: string | null;
+  observed: string | null;
+  detail: string | null;
+}
+
+export interface LiveEvidenceVerification {
+  run: LiveEvidenceRun;
+  samples: LiveEvidenceVerificationSample[];
+  contract_validation: string;
+  regression_result: string;
+  failed_checks: LiveEvidenceFailedCheck[];
+  final_decision: string;
+  final_status: string;
+  recovery_proof: Record<string, unknown> | null;
+}
+
+export interface LiveEvidenceAutomationStage {
+  stage: string;
+  automation: string;
+  result: string;
+  detail: string;
+}
+
+export interface LiveBrightDataEvidence {
+  available: boolean;
+  mode: "persisted_real_brightdata_run";
+  live_trigger_safe: boolean;
+  live_trigger_reason: string;
+  collector: LiveEvidenceCollector | null;
+  broken_run: LiveEvidenceRun | null;
+  invalid_records: LiveEvidenceInvalidRecord[];
+  detection: LiveEvidenceDetection | null;
+  repair_attempts: LiveEvidenceRepairAttempt[];
+  repair_patch_available: boolean;
+  repair_patch_note: string;
+  verification: LiveEvidenceVerification | null;
+  automation: LiveEvidenceAutomationStage[];
+}
+
+/** Lifecycle of one on-demand research enrichment job. */
+export type ResearchEnrichmentStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed";
+
+export const TERMINAL_ENRICHMENT_STATUSES: ResearchEnrichmentStatus[] = [
+  "succeeded",
+  "failed",
+];
+
+export function isEnrichmentTerminal(
+  status: ResearchEnrichmentStatus,
+): boolean {
+  return TERMINAL_ENRICHMENT_STATUSES.includes(status);
+}
+
+/** 202 body of POST /opportunities/{signal_id}/research/enrich. */
+export interface ResearchEnrichmentAccepted {
+  enrichment_id: UUID;
+  signal_id: UUID;
+  status: ResearchEnrichmentStatus;
+  /** Joined a job already in flight. Expected, never an error. */
+  already_running: boolean;
+  /** Research already exists; nothing was started. Just read it. */
+  already_enriched: boolean;
+}
+
+/**
+ * GET /opportunities/{signal_id}/research/enrichment.
+ *
+ * The endpoint returns null when analysis has never been requested, which
+ * is a different fact from a job that exists and is queued.
+ */
+export interface ResearchEnrichmentRead {
+  enrichment_id: UUID;
+  signal_id: UUID;
+  status: ResearchEnrichmentStatus;
+  started_at: ISODateTime | null;
+  completed_at: ISODateTime | null;
+  /** Present only on "failed". Safe to show a user. */
+  error: string | null;
+  /**
+   * A run that SUCCEEDED but is incomplete: some searches returned and
+   * some timed out. Shown ALONGSIDE the research, never instead of it.
+   */
+  warning: string | null;
+  /**
+   * Per-query progress, in plan order.
+   *
+   * The ONLY permitted source for "2 of 3 searches complete". Progress
+   * must never be animated on a timer here: a stuck provider job and a
+   * healthy one would look identical, which is the exact failure this
+   * field exists to make visible. Empty for runs that predate per-query
+   * tracking, so treat it as optional detail rather than as status.
+   */
+  query_states: ResearchQueryState[];
+}
+
+/** Lifecycle of ONE research query inside an enrichment. */
+export type ResearchQueryStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "timed_out";
+
+export interface ResearchQueryState {
+  query: string;
+  status: ResearchQueryStatus;
+  /** Bright Data's job id. An identifier, never a credential. */
+  provider_job_id: string | null;
+  records_received: number;
+  papers_returned: number;
+  error: string | null;
+  elapsed_seconds: number | null;
+}
+
+const TERMINAL_QUERY_STATUSES: ResearchQueryStatus[] = [
+  "succeeded",
+  "failed",
+  "timed_out",
+];
+
+/** How many of this run's searches have stopped, for any reason. */
+export function completedSearchCount(
+  states: readonly ResearchQueryState[],
+): number {
+  return states.filter((state) => TERMINAL_QUERY_STATUSES.includes(state.status))
+    .length;
+}
+
+/** Searches that ended without returning papers. */
+export function unfinishedSearchCount(
+  states: readonly ResearchQueryState[],
+): number {
+  return states.filter(
+    (state) => state.status === "timed_out" || state.status === "failed",
+  ).length;
+}
+
+/** Papers acquired so far, across the searches that have returned. */
+export function papersSoFar(states: readonly ResearchQueryState[]): number {
+  return states.reduce((total, state) => total + state.papers_returned, 0);
 }

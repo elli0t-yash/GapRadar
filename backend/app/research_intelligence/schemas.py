@@ -8,10 +8,15 @@ so nothing in this module knows about HTTP, Bright Data, or credentials.
 
 import enum
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+# The only app import here, and deliberately a leaf: app.domain.enums
+# defines enums and imports nothing, so this module stays free of the
+# ORM and of every provider.
+from app.domain.enums import ResearchEnrichmentStatus, ResearchQueryStatus
 
 # One raw record exactly as the arXiv collector delivers it. Left as a
 # plain dict rather than a strict model on purpose: it is UNTRUSTED
@@ -223,3 +228,105 @@ class ResearchIntelligence(BaseModel):
     # Concepts that recur across the matches, most frequent first.
     top_concepts: list[str] = Field(default_factory=list)
     top_papers: list[ResearchPaperMatch] = Field(default_factory=list)
+
+
+# -- on-demand enrichment ---------------------------------------------------
+# The job record behind POST /research/enrich, as the browser sees it.
+# Deliberately reports that work was requested and how it ended -- never
+# what it found. What it found is the research intelligence itself, which
+# the client refetches on success rather than reading a duplicated summary
+# here that could disagree with it.
+
+
+class ResearchQueryStateRead(BaseModel):
+    """One research query's observable state, for polling.
+
+    Exists so the browser can say "2 of 3 searches complete" from FACTS.
+    Without it the UI would have to animate stage progress on a timer,
+    which is exactly how a 14-minute run came to look identical to a
+    working one.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    query: str
+    status: ResearchQueryStatus
+    # Bright Data's own job id ("j_..."). An identifier, never a
+    # credential -- it is what makes a slow search traceable in Scraper
+    # Studio without reading the backend logs.
+    provider_job_id: str | None = None
+    records_received: int = 0
+    papers_returned: int = 0
+    error: str | None = None
+    elapsed_seconds: float | None = None
+
+
+class ResearchEnrichmentRead(BaseModel):
+    """One enrichment job, for polling."""
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    enrichment_id: uuid.UUID = Field(validation_alias=AliasChoices("id"))
+    signal_id: uuid.UUID
+    status: ResearchEnrichmentStatus
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    # Why the job could not be carried out. Present only on FAILED, and
+    # written to be shown to a user: never a credential, a stack trace, or
+    # a prompt.
+    error: str | None = None
+    # A run that SUCCEEDED but is incomplete -- some searches returned and
+    # some timed out. Set alongside a success, never instead of one: the
+    # research that was found is real, and the gap is stated rather than
+    # hidden.
+    warning: str | None = None
+    # Per-query progress, in plan order. Empty for runs that predate
+    # per-query tracking, which is why the client must treat it as
+    # optional detail rather than the source of overall status.
+    query_states: list[ResearchQueryStateRead] = Field(default_factory=list)
+
+    @property
+    def searches_total(self) -> int:
+        return len(self.query_states)
+
+    @property
+    def searches_complete(self) -> int:
+        return sum(
+            1
+            for state in self.query_states
+            if state.status
+            in (
+                ResearchQueryStatus.SUCCEEDED,
+                ResearchQueryStatus.FAILED,
+                ResearchQueryStatus.TIMED_OUT,
+            )
+        )
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in (
+            ResearchEnrichmentStatus.SUCCEEDED,
+            ResearchEnrichmentStatus.FAILED,
+        )
+
+
+class ResearchEnrichmentAccepted(BaseModel):
+    """The 202 answer to "please analyse research for this opportunity".
+
+    Small on purpose. It reports that work is claimed, not what the work
+    found: no paper count, no relevance, because none of that exists yet
+    and a placeholder would be indistinguishable from a real result.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    enrichment_id: uuid.UUID
+    signal_id: uuid.UUID
+    status: ResearchEnrichmentStatus
+    # True when this request joined a job already in flight instead of
+    # starting one. Still a 202 -- the caller asked for analysis and
+    # analysis is happening -- but no second provider run was triggered.
+    already_running: bool = False
+    # True when this opportunity already has persisted research and no new
+    # job was started. The client should simply read GET /research.
+    already_enriched: bool = False

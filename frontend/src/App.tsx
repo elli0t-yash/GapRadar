@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { GapRadarPage } from "./pages/GapRadarPage";
 import { ComingSoonPage } from "./pages/ComingSoonPage";
+import { ReliabilityPage } from "./pages/ReliabilityPage";
 import { ScrapingIntro } from "./components/ScrapingIntro";
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
             />
           }
         />
+        <Route path="/reliability" element={<ReliabilityPage />} />
       </Routes>
     </>
   );

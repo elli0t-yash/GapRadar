@@ -3,7 +3,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 from app.db.base import Base
 from app.db.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
@@ -89,5 +91,26 @@ class ResearchEnrichmentRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # written to be shown to a user: it never carries a provider
     # credential, a stack trace, or a prompt.
     error: Mapped[str | None] = mapped_column(Text)
+    # A completed-but-incomplete run: some searches returned and some did
+    # not. Set alongside SUCCEEDED, never instead of it -- the research
+    # that WAS found is real and is worth showing, and hiding the gap
+    # would be the dishonest half of that trade.
+    warning: Mapped[str | None] = mapped_column(Text)
+    # Per-query progress, written as the run proceeds rather than at the
+    # end. This is the ONLY source the frontend may use to say "2 of 3
+    # searches complete": without it the UI would have to fake stage
+    # progress on a timer, which is exactly what a 14-minute run made
+    # unforgivable.
+    #
+    # A denormalized snapshot, deliberately. The alternative -- a
+    # research_enrichment_query table -- buys referential neatness for a
+    # payload that is never queried across runs, only read back whole for
+    # the run that owns it.
+    query_states: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
 
     signal: Mapped["Signal"] = relationship()

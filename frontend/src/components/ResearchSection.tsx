@@ -1,4 +1,14 @@
-import type { ResearchIntelligence, ResearchPaperMatch } from "../api/types";
+import type {
+  ResearchEnrichmentStatus,
+  ResearchIntelligence,
+  ResearchPaperMatch,
+  ResearchQueryState,
+} from "../api/types";
+import {
+  completedSearchCount,
+  papersSoFar,
+  unfinishedSearchCount,
+} from "../api/types";
 import "./ResearchSection.css";
 
 /**
@@ -98,16 +108,178 @@ function ResearchNotice({ title, body }: { title: string; body: string }) {
   );
 }
 
+/**
+ * The call to action for an opportunity nobody has analysed yet, and the
+ * progress it shows once someone has.
+ *
+ * The stage list is presented as WHAT THE ANALYSIS DOES, not as a live
+ * position within it: the backend reports queued/running/succeeded/failed
+ * and nothing finer, so claiming a current stage -- or a percentage --
+ * would be inventing detail it cannot prove.
+ */
+/**
+ * One line of the progress list.
+ *
+ * `detail` is always something the backend actually reported. There is
+ * deliberately no timer, no interpolation and no optimistic advance: a
+ * stage that cannot be described from persisted state stays "waiting".
+ */
+function Stage({
+  label,
+  state,
+  detail,
+}: {
+  label: string;
+  state: "done" | "active" | "waiting";
+  detail: string;
+}) {
+  return (
+    <li className={`research-stage is-${state}`}>
+      <span className="research-stage-mark" aria-hidden="true">
+        {state === "done" ? "✓" : state === "active" ? "•" : ""}
+      </span>
+      <span className="research-stage-label">{label}</span>
+      <span className="research-stage-detail">{detail}</span>
+    </li>
+  );
+}
+
+function AnalyseResearchPanel({
+  status,
+  error,
+  queryStates,
+  starting,
+  onAnalyse,
+}: {
+  status: ResearchEnrichmentStatus | null;
+  error: string | null;
+  queryStates: readonly ResearchQueryState[];
+  /** A POST is in flight. The button is disabled before any status exists. */
+  starting: boolean;
+  onAnalyse: () => void;
+}) {
+  const active = starting || status === "queued" || status === "running";
+
+  if (active) {
+    const total = queryStates.length;
+    const complete = completedSearchCount(queryStates);
+    const unfinished = unfinishedSearchCount(queryStates);
+    const papers = papersSoFar(queryStates);
+    const searchesDone = total > 0 && complete === total;
+
+    return (
+      <div className="research-notice is-working" aria-live="polite">
+        <p className="research-notice-title">
+          <span className="research-spinner" aria-hidden="true" />
+          Analysing the research frontier…
+        </p>
+        <ul className="research-stages">
+          <Stage
+            label="Research directions"
+            state={total > 0 ? "done" : "active"}
+            detail={total > 0 ? `${total} generated` : "generating…"}
+          />
+          <Stage
+            label="Research search"
+            state={searchesDone ? "done" : total > 0 ? "active" : "waiting"}
+            detail={total > 0 ? `${complete}/${total} complete` : "waiting"}
+          />
+          <Stage
+            label="Semantic matching"
+            state={searchesDone ? "active" : "waiting"}
+            detail={searchesDone ? `${papers} papers` : "waiting"}
+          />
+          <Stage
+            label="Saving intelligence"
+            state="waiting"
+            detail="waiting"
+          />
+        </ul>
+        {unfinished > 0 && (
+          <p className="research-notice-warning">
+            {unfinished} search{unfinished === 1 ? "" : "es"} did not return —
+            continuing with the papers already found.
+          </p>
+        )}
+        <p className="research-notice-body">
+          You can keep browsing — the results are saved either way.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "failed") {
+    return (
+      <div className="research-notice is-error">
+        <p className="research-notice-title">Research analysis did not complete</p>
+        <p className="research-notice-body">
+          {error ?? "The analysis could not be completed."}
+        </p>
+        <button
+          type="button"
+          className="research-retry"
+          onClick={onAnalyse}
+          disabled={starting}
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="research-notice is-cta">
+      <p className="research-notice-title">Explore matching research</p>
+      <p className="research-notice-body">
+        GapRadar can search emerging research and identify technologies that may
+        help solve this problem.
+      </p>
+      <button
+        type="button"
+        className="research-analyse"
+        onClick={onAnalyse}
+        disabled={starting}
+      >
+        Analyse research
+      </button>
+      <p className="research-notice-footnote">
+        Matching research has not been analysed for this opportunity yet.
+      </p>
+    </div>
+  );
+}
+
+
 export function ResearchSection({
   research,
   loading,
   error,
   onRetry,
+  enrichmentStatus,
+  enrichmentError,
+  enrichmentQueryStates,
+  enrichmentStarting,
+  enrichmentWarning,
+  onAnalyse,
 }: {
   research: ResearchIntelligence | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  /**
+   * The backend job's state, or null when analysis has never been asked
+   * for. Purely reflected -- this component never starts work itself.
+   */
+  enrichmentStatus: ResearchEnrichmentStatus | null;
+  enrichmentError: string | null;
+  /** Backend-reported per-query progress. Never synthesised here. */
+  enrichmentQueryStates: readonly ResearchQueryState[];
+  /** A POST is in flight, so the CTA must not accept another click. */
+  enrichmentStarting: boolean;
+  /** A partial run: research is real, and so is the gap. */
+  enrichmentWarning: string | null;
+  /** Runs ONLY from the button below. Never from an effect. */
+  onAnalyse: () => void;
 }) {
   return (
     <section className="research-section" aria-labelledby="research-heading">
@@ -136,13 +308,28 @@ export function ResearchSection({
 
       {!loading && !error && research && (
         <>
+          {/* A run that returned real research but not all of it. Shown
+              ABOVE the results and never instead of them: the papers
+              below are genuine, and the gap is stated rather than hidden
+              behind a success. */}
+          {enrichmentWarning && (
+            <p className="research-partial-warning" role="status">
+              {enrichmentWarning}
+            </p>
+          )}
+
           {/* State 3: enrichment has never run. `generated_queries` empty is
-              the backend's own signal for this -- see the integration doc. */}
+              the backend's own signal for this -- see the integration doc.
+              This is the normal state for almost every opportunity, so it
+              offers the action rather than reading as a dead end. */}
           {research.generated_queries.length === 0 &&
             research.matched_paper_count === 0 && (
-              <ResearchNotice
-                title="Research intelligence is not available for this opportunity yet."
-                body="Matching research is discovered per opportunity. This one has not been analysed so far."
+              <AnalyseResearchPanel
+                status={enrichmentStatus}
+                error={enrichmentError}
+                queryStates={enrichmentQueryStates}
+                starting={enrichmentStarting}
+                onAnalyse={onAnalyse}
               />
             )}
 
