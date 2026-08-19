@@ -70,6 +70,29 @@ class ResearchSource(str, enum.Enum):
     ARXIV = "arxiv"
 
 
+class ResearchEnrichmentStatus(str, enum.Enum):
+    """Lifecycle of ONE on-demand research enrichment, persisted.
+
+    Deliberately coarse. Unlike PipelineRunStatus it does not name the
+    internal stage, because the frontend must not claim a stage the
+    backend cannot actually prove it is in: the orchestration runs three
+    provider searches and a judging pass without reporting which one is
+    live. Four states is what the backend can honestly say.
+
+    QUEUED and RUNNING are active; SUCCEEDED and FAILED are terminal.
+
+    SUCCEEDED means the enrichment ran to completion -- NOT that it found
+    anything. A run that searched honestly and matched nothing is a
+    success whose result is zero matches, which the research read model
+    already distinguishes from "never enriched".
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class SignalType(str, enum.Enum):
     COMPLAINT = "complaint"
     QUESTION = "question"

@@ -1,0 +1,45 @@
+.error-state {
+  grid-column: 1 / -1;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.error-state-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.error-state-message {
+  margin: 0 auto var(--space-4);
+  max-width: 46ch;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.error-state-retry {
+  padding: 8px 20px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--bg-raised);
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.error-state-retry:hover {
+  background: var(--accent-2);
+}
+
+.error-state-retry:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
