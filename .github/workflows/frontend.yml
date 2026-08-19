@@ -39,3 +39,6 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+      - name: Build frontend Docker image
+        run: docker build -t gapradar-frontend-ci .
