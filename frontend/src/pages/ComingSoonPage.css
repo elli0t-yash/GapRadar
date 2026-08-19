@@ -1,0 +1,31 @@
+.coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 60vh;
+  justify-content: center;
+  max-width: 480px;
+}
+
+.coming-soon h1 {
+  font-size: var(--fs-2xl);
+}
+
+.coming-soon-subtitle {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+}
+
+.coming-soon-badge {
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

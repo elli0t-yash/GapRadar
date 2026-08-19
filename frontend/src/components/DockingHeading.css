@@ -1,0 +1,109 @@
+.docking-heading {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.docking-heading.is-centered {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  justify-content: center;
+  padding: 24px;
+  background-color: #fffaf5;
+  background-image: radial-gradient(
+    circle,
+    rgba(244, 80, 46, 0.08) 1px,
+    transparent 1.2px
+  );
+  background-size: 22px 22px;
+}
+
+.docking-heading.is-docked {
+  position: static;
+  align-items: flex-start;
+  text-align: left;
+  padding: 28px 0 6px;
+}
+
+.docking-heading-title {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  color: #201a15;
+}
+
+.docking-heading-line {
+  display: block;
+  font-size: 52px;
+  line-height: 1.12;
+  letter-spacing: -0.5px;
+  transition:
+    font-size 750ms cubic-bezier(0.2, 0.85, 0.25, 1),
+    letter-spacing 750ms cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+
+/* Docked: collapse the two-line display headline into one small,
+   left-aligned kicker that introduces the grid below it, rather than
+   competing with the Hero's own heading. */
+.docking-heading.is-docked .docking-heading-line {
+  display: inline;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.docking-heading.is-docked .docking-heading-line + .docking-heading-line::before {
+  content: " · ";
+  color: var(--border-strong);
+}
+
+.docking-heading-accent {
+  color: #f4502e;
+  font-style: normal;
+}
+
+.docking-heading.is-docked .docking-heading-accent {
+  color: var(--accent-text);
+}
+
+.docking-heading-subtitle {
+  margin: 16px 0 0;
+  font-size: 15.5px;
+  color: #6b5f52;
+  max-width: 520px;
+  text-align: center;
+  opacity: 1;
+  max-height: 80px;
+  overflow: hidden;
+  transition:
+    opacity 750ms ease,
+    max-height 750ms ease,
+    margin-top 750ms ease;
+}
+
+.docking-heading.is-docked .docking-heading-subtitle {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .docking-heading-line {
+    font-size: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docking-heading,
+  .docking-heading-line,
+  .docking-heading-subtitle {
+    transition: none !important;
+  }
+}
