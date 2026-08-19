@@ -403,11 +403,148 @@ def test_the_default_generator_and_matcher_run_end_to_end(
         db_session,
         signal=signal,
         collector=collector_for(queries, [papers("2608.00001"), [], []]),
-        matcher=ConceptOverlapMatcher(scale=6.0),
+        matcher=ConceptOverlapMatcher(),
+        # The lexical matcher scores well below 70 by design (it is not
+        # semantic); the threshold is lowered so this exercises the
+        # default stack rather than the matcher's honesty.
+        policy=ResearchMatchPolicy(relevance_threshold=5.0),
     )
 
     assert result.matches_created >= 1
     match = db_session.execute(select(OpportunityResearchMatch)).scalars().first()
     assert match is not None
-    assert 70.0 <= match.relevance_score <= 100.0
+    # Lexical overlap, reported as measured -- low by design and well
+    # under 70. It must still be on the 0-100 band and above the
+    # threshold this run deliberately lowered.
+    assert 5.0 <= match.relevance_score < 70.0
     assert match.technical_readiness_score is None
+
+
+# -- semantic matcher integration -------------------------------------------
+# The orchestration must behave identically whichever matcher it is given;
+# these pin the parts that only matter once a matcher can FAIL per paper.
+
+
+class FlakyMatcher:
+    """Judges some papers and declines others, as a real provider does."""
+
+    def __init__(self, scores: dict[str, float | None]) -> None:
+        self.scores = scores
+        self.seen: list[str] = []
+
+    def judge(
+        self, *, context: MarketContext, plan: ResearchQueryPlan, paper: ResearchPaper
+    ) -> ResearchMatchVerdict | None:
+        self.seen.append(paper.arxiv_id)
+        score = self.scores.get(paper.arxiv_id)
+        if score is None:
+            return None
+        return ResearchMatchVerdict(
+            relevance_score=score,
+            matched_concepts=["urban freight"],
+            match_reason=f"Semantic judgement for {paper.arxiv_id}.",
+            technical_readiness_score=None,
+        )
+
+
+def test_one_paper_declining_does_not_discard_the_other_verdicts(
+    db_session: Session,
+) -> None:
+    """A provider failure on one paper must not cost the papers that worked."""
+    signal = cargo_signal(db_session)
+    queries = plan_for(db_session, signal)
+    matcher = FlakyMatcher({"2608.00001": 88.0, "2608.00002": None, "2608.00003": 76.0})
+
+    result = enrich_opportunity_with_research(
+        db_session,
+        signal=signal,
+        collector=collector_for(
+            queries, [papers("2608.00001"), papers("2608.00002"), papers("2608.00003")]
+        ),
+        matcher=matcher,
+    )
+
+    assert len(matcher.seen) == 3
+    assert result.judged_paper_count == 3
+    # The declined paper is neither persisted nor counted as rejected.
+    assert result.matches_created == 2
+    assert result.matches_rejected == 0
+    assert count(db_session, OpportunityResearchMatch) == 2
+
+
+def test_a_declined_paper_leaves_an_earlier_verdict_untouched(
+    db_session: Session,
+) -> None:
+    """Re-running with a broken provider must not delete what was learned."""
+    signal = cargo_signal(db_session)
+    queries = plan_for(db_session, signal)
+    datasets = [papers("2608.00001"), [], []]
+
+    enrich_opportunity_with_research(
+        db_session,
+        signal=signal,
+        collector=collector_for(queries, datasets),
+        matcher=FlakyMatcher({"2608.00001": 91.0}),
+    )
+    enrich_opportunity_with_research(
+        db_session,
+        signal=signal,
+        collector=collector_for(queries, datasets),
+        matcher=FlakyMatcher({"2608.00001": None}),
+    )
+
+    match = db_session.execute(select(OpportunityResearchMatch)).scalar_one()
+    assert match.relevance_score == 91.0
+
+
+def test_a_semantic_verdict_replaces_an_earlier_one_for_the_same_pair(
+    db_session: Session,
+) -> None:
+    signal = cargo_signal(db_session)
+    queries = plan_for(db_session, signal)
+    datasets = [papers("2608.00001"), [], []]
+
+    enrich_opportunity_with_research(
+        db_session,
+        signal=signal,
+        collector=collector_for(queries, datasets),
+        matcher=FlakyMatcher({"2608.00001": 74.0}),
+    )
+    second = enrich_opportunity_with_research(
+        db_session,
+        signal=signal,
+        collector=collector_for(queries, datasets),
+        matcher=FlakyMatcher({"2608.00001": 93.0}),
+    )
+
+    assert second.matches_created == 0
+    assert second.matches_updated == 1
+    match = db_session.execute(select(OpportunityResearchMatch)).scalar_one()
+    assert match.relevance_score == 93.0
+    assert count(db_session, OpportunityResearchMatch) == 1
+
+
+def test_the_threshold_is_meaningful_with_differentiated_semantic_scores(
+    db_session: Session,
+) -> None:
+    """What the saturated lexical matcher could not demonstrate."""
+    signal = cargo_signal(db_session)
+    queries = plan_for(db_session, signal)
+    matcher = FlakyMatcher({"2608.00001": 92.0, "2608.00002": 71.0, "2608.00003": 44.0})
+
+    result = enrich_opportunity_with_research(
+        db_session,
+        signal=signal,
+        collector=collector_for(
+            queries, [papers("2608.00001"), papers("2608.00002"), papers("2608.00003")]
+        ),
+        matcher=matcher,
+    )
+
+    assert result.matches_created == 2
+    assert result.matches_rejected == 1
+    scores = {
+        m.relevance_score
+        for m in db_session.execute(select(OpportunityResearchMatch)).scalars()
+    }
+    assert scores == {92.0, 71.0}

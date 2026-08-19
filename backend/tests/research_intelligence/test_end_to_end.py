@@ -28,7 +28,10 @@ from app.db.models import (
     ResearchSearchRun,
 )
 from app.research_intelligence.acquisition import SequenceResearchCollector
-from app.research_intelligence.matching import ConceptOverlapMatcher
+from app.research_intelligence.matching import (
+    ConceptOverlapMatcher,
+    ResearchMatchPolicy,
+)
 from app.research_intelligence.orchestration import enrich_opportunity_with_research
 from app.research_intelligence.query_generation import ConceptQueryGenerator
 from app.research_intelligence.service import (
@@ -103,7 +106,8 @@ def test_pain_to_research_intelligence_end_to_end(
         db_session,
         signal=signal,
         collector=collector,
-        matcher=ConceptOverlapMatcher(scale=6.0),
+        matcher=ConceptOverlapMatcher(),
+        policy=ResearchMatchPolicy(relevance_threshold=5.0),
     )
 
     # 4. Papers persisted once each, despite one appearing in two searches.
@@ -121,7 +125,9 @@ def test_pain_to_research_intelligence_end_to_end(
     matches = list(db_session.execute(select(OpportunityResearchMatch)).scalars())
     assert matches
     assert all(match.signal_id == signal.id for match in matches)
-    assert all(70.0 <= match.relevance_score <= 100.0 for match in matches)
+    # Lexical, unscaled: on the band, differentiated, and not saturated.
+    assert all(0.0 < match.relevance_score < 70.0 for match in matches)
+    assert len({match.relevance_score for match in matches}) > 1
     matched_arxiv_ids = {
         db_session.get(ResearchPaper, match.research_paper_id).arxiv_id
         for match in matches
@@ -167,7 +173,8 @@ def test_re_running_the_whole_flow_is_idempotent(
             db_session,
             signal=signal,
             collector=SequenceResearchCollector(datasets),
-            matcher=ConceptOverlapMatcher(scale=6.0),
+            matcher=ConceptOverlapMatcher(),
+            policy=ResearchMatchPolicy(relevance_threshold=5.0),
         )
 
     body = api_client.get(f"/api/v1/opportunities/{signal.id}/research").json()

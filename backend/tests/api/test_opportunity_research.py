@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Collector, Signal, Source
 from app.research_intelligence.acquisition import SequenceResearchCollector
-from app.research_intelligence.matching import ConceptOverlapMatcher
+from app.research_intelligence.matching import (
+    ConceptOverlapMatcher,
+    ResearchMatchPolicy,
+)
 from app.research_intelligence.orchestration import enrich_opportunity_with_research
 from app.research_intelligence.query_generation import ConceptQueryGenerator
 from app.research_intelligence.service import market_context_from_signal
@@ -55,7 +58,8 @@ def enrich(db_session: Session, signal: Signal, *arxiv_ids: str) -> None:
         db_session,
         signal=signal,
         collector=collector,
-        matcher=ConceptOverlapMatcher(scale=6.0),
+        matcher=ConceptOverlapMatcher(),
+        policy=ResearchMatchPolicy(relevance_threshold=5.0),
     )
 
 
@@ -106,7 +110,8 @@ def test_a_top_paper_carries_everything_a_ui_needs(
     assert paper["published_at"] == "2026-08-13"
     assert paper["paper_url"].startswith("https://arxiv.org/abs/")
     assert paper["pdf_url"].startswith("https://arxiv.org/pdf/")
-    assert 70.0 <= paper["relevance_score"] <= 100.0
+    # Lexical development matcher: on the 0-100 band, and honestly low.
+    assert 0.0 < paper["relevance_score"] < 70.0
     assert paper["matched_concepts"]
     assert paper["match_reason"]
     # Never invented by a lexical matcher.

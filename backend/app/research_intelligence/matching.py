@@ -23,7 +23,11 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.models import ResearchPaper
-from app.research_intelligence.candidates import context_tokens, score_paper
+from app.research_intelligence.candidates import (
+    DEFAULT_CANDIDATE_LIMIT,
+    context_tokens,
+    score_paper,
+)
 from app.research_intelligence.query_generation import tokenize
 from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
 
@@ -52,7 +56,7 @@ class ResearchMatchPolicy(BaseModel):
     relevance_threshold: float = Field(
         default=DEFAULT_RELEVANCE_THRESHOLD, ge=MIN_SCORE, le=MAX_SCORE
     )
-    candidate_limit: int = Field(default=12, ge=1, le=100)
+    candidate_limit: int = Field(default=DEFAULT_CANDIDATE_LIMIT, ge=1, le=100)
 
 
 DEFAULT_MATCH_POLICY = ResearchMatchPolicy()
@@ -174,14 +178,23 @@ class ConceptOverlapMatcher:
     abstract word count is evidence about how buildable the research is,
     and returning a number anyway would be exactly the fabrication the
     null is there to prevent.
-    """
 
-    def __init__(self, *, scale: float = 1.0) -> None:
-        # Lexical overlap scores far lower than semantic relevance does;
-        # `scale` lets a caller (or a test) map that onto the 0-100 band
-        # a threshold is expressed in, without pretending the underlying
-        # signal got any better.
-        self.scale = scale
+    NO SCORE SCALING. An earlier version multiplied the overlap by a
+    `scale` factor so its scores would reach a threshold expressed on the
+    0-100 band. The first real pilot showed what that actually did: raw
+    overlaps of 33.54, 25.21, 18.33 and 17.08 all multiplied past 100 and
+    clamped to exactly 100, so four visibly different papers reported an
+    identical score and 12 of 12 candidates cleared the threshold. The
+    scaling destroyed the only signal this matcher has.
+
+    So the overlap is reported as measured. Real consequence, stated
+    plainly: lexical scores land roughly in the 5-35 band and this matcher
+    will almost never clear a threshold of 70 on its own. That is the
+    honest answer -- shared vocabulary is weak evidence of relevance --
+    and a caller that wants matches out of the development matcher should
+    lower ResearchMatchPolicy.relevance_threshold deliberately rather
+    than inflate the score.
+    """
 
     def judge(
         self,
@@ -197,7 +210,10 @@ class ConceptOverlapMatcher:
 
         concepts = _concepts_for(matched, plan)
         return ResearchMatchVerdict(
-            relevance_score=score * self.scale,
+            # Reported as measured. The overlap score is ALREADY on 0-100
+            # (it is a weighted coverage fraction times 100), so nothing
+            # is transformed on the way out.
+            relevance_score=score,
             matched_concepts=concepts,
             match_reason=(
                 f"Lexical overlap only: the paper's title and abstract share "

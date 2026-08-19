@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     BRIGHTDATA_BASE_URL: str = "https://api.brightdata.com"
     HARNESS_API_KEY: str = ""
 
+    # Semantic research matching. Empty key means the semantic matcher is
+    # simply unavailable -- callers fall back to the development matcher
+    # rather than the application failing to start.
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-5-mini"
+    # minimal | low | medium | high. Medium is deliberate: judging one
+    # abstract against one problem is a bounded call made once per
+    # candidate, and every candidate costs money.
+    OPENAI_REASONING_EFFORT: str = "medium"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [

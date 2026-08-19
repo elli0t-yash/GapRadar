@@ -21,11 +21,19 @@ from app.db.models import ResearchPaper
 from app.research_intelligence.query_generation import tokenize
 from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
 
-# How many papers reach the semantic stage. Sized so three 15-result
-# searches (~45 papers, fewer after dedupe) are cut to roughly a quarter:
-# small enough to judge affordably, large enough that a good paper ranked
-# eighth by lexical overlap alone still gets its chance.
-DEFAULT_CANDIDATE_LIMIT = 12
+# How many papers reach the semantic stage.
+#
+# Raised from 12 after the first real pilot measured what the filter was
+# actually doing. Of 23 real papers retrieved for the cargo opportunity,
+# ALL 23 scored above zero -- the zero-overlap rule removed nothing, and
+# the cap alone cut 11 papers scoring 5.83 to 11.46. Those are exactly
+# the papers a lexical score cannot judge and a semantic matcher can, so
+# the cap was the binding constraint on recall, not the overlap rule.
+#
+# 18 keeps the weakest tail out (5 papers below ~8.5 in that run) while
+# giving the semantic stage half again as many candidates. It is a cost
+# knob, not a quality threshold: every candidate costs one provider call.
+DEFAULT_CANDIDATE_LIMIT = 18
 
 # A title match is worth roughly twice an abstract match: a paper whose
 # TITLE shares the problem's vocabulary is far more likely to be about

@@ -21,8 +21,10 @@ from app.research_intelligence.matching import (
 )
 from tests.research_intelligence.test_candidates import (
     CONTEXT,
+    MODERATE,
     PLAN,
     RELEVANT,
+    TANGENTIAL,
     UNRELATED,
 )
 
@@ -141,9 +143,7 @@ def test_a_threshold_outside_the_score_band_is_refused() -> None:
 
 
 def test_the_stand_in_judges_a_relevant_paper() -> None:
-    result = ConceptOverlapMatcher(scale=4.0).judge(
-        context=CONTEXT, plan=PLAN, paper=RELEVANT
-    )
+    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
     assert 0.0 < result.relevance_score <= 100.0
@@ -161,27 +161,58 @@ def test_the_stand_in_declines_rather_than_scoring_an_unrelated_paper() -> None:
 
 def test_the_stand_in_never_invents_a_readiness_score() -> None:
     """Word counts are not evidence about how buildable research is."""
-    result = ConceptOverlapMatcher(scale=4.0).judge(
-        context=CONTEXT, plan=PLAN, paper=RELEVANT
-    )
+    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
     assert result.technical_readiness_score is None
 
 
-def test_the_stand_in_scale_cannot_push_a_score_out_of_band() -> None:
-    result = ConceptOverlapMatcher(scale=1000.0).judge(
-        context=CONTEXT, plan=PLAN, paper=RELEVANT
-    )
+def test_the_stand_in_reports_overlap_as_measured() -> None:
+    """No scaling. The overlap score is already on 0-100."""
+    from app.research_intelligence.candidates import context_tokens, score_paper
+
+    expected, _ = score_paper(context_tokens(CONTEXT, PLAN), RELEVANT)
+    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
-    assert result.relevance_score == 100.0
+    assert result.relevance_score == expected
+
+
+def test_lexical_scores_stay_differentiated_and_never_saturate() -> None:
+    """The regression the first real pilot exposed.
+
+    Three real papers scored 33.54 / 25.21 / 18.33 by lexical overlap.
+    A `scale=6.0` multiplier pushed all three past 100, they clamped to
+    exactly 100, and 12 of 12 candidates then cleared threshold 70 --
+    the transformation destroyed the only signal this matcher has.
+    """
+    from app.research_intelligence.candidates import context_tokens, score_paper
+
+    tokens = context_tokens(CONTEXT, PLAN)
+    # Ordered strongest to weakest by construction.
+    papers = [RELEVANT, MODERATE, TANGENTIAL]
+    scores = []
+    for paper in papers:
+        verdict = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=paper)
+        assert verdict is not None
+        assert verdict.relevance_score == score_paper(tokens, paper)[0]
+        scores.append(verdict.relevance_score)
+
+    assert scores[0] > scores[1] > scores[2], f"collapsed: {scores}"
+    assert len(set(scores)) == 3
+    assert all(score < 100.0 for score in scores), f"saturated: {scores}"
+
+
+def test_the_lexical_matcher_does_not_pretend_to_clear_the_threshold() -> None:
+    """Honest consequence: shared words are weak evidence of relevance."""
+    verdict = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+
+    assert verdict is not None
+    assert verdict.relevance_score < DEFAULT_RELEVANCE_THRESHOLD
 
 
 def test_the_stand_in_reports_plan_concepts_rather_than_bare_tokens() -> None:
-    result = ConceptOverlapMatcher(scale=4.0).judge(
-        context=CONTEXT, plan=PLAN, paper=RELEVANT
-    )
+    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
     assert "urban freight" in result.matched_concepts

@@ -67,6 +67,11 @@ TANGENTIAL = paper(
     title="A survey of scheduling heuristics",
     abstract="Vehicle fleets are mentioned once among many applications.",
 )
+MODERATE = paper(
+    "2608.00004",
+    title="Freight routing under uncertainty",
+    abstract="Routing methods for logistics networks.",
+)
 UNRELATED = paper(
     "2608.00003",
     title="Protein folding with quantum annealing",
@@ -143,7 +148,9 @@ def test_the_candidate_set_is_capped() -> None:
     ]
 
     assert len(rank_candidates(CONTEXT, PLAN, many)) == DEFAULT_CANDIDATE_LIMIT
-    assert 10 <= DEFAULT_CANDIDATE_LIMIT <= 15
+    # Raised 12 -> 18 on pilot evidence: the cap, not the zero-overlap
+    # rule, was what removed 11 of 23 real papers.
+    assert DEFAULT_CANDIDATE_LIMIT == 18
 
 
 def test_the_cap_is_configurable() -> None:
