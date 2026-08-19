@@ -48,8 +48,7 @@ from app.schemas.reliability import (
 DEMO_PROVIDER = "fixture_replay"
 DEMO_EXTERNAL_COLLECTOR_ID = "gapradar-recallguard-self-healing-v1"
 _FIXTURE_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "demo"
+    Path(__file__).resolve().parent
     / "fixtures"
     / "recallguard_self_healing_v1.json"
 )
