@@ -20,6 +20,9 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
+COPY scripts ./scripts
+
+RUN chmod +x ./scripts/start.sh
 
 # Run the service without root privileges.
 RUN addgroup --system app && adduser --system --ingroup app app \
@@ -29,4 +32,4 @@ USER app
 
 EXPOSE 8000
 
-ENTRYPOINT [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["./scripts/start.sh"]
