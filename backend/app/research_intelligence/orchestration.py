@@ -31,14 +31,20 @@ from app.db.models import (
     ResearchPaper,
     Signal,
 )
+from app.domain.enums import ResearchQueryStatus
 from app.research_intelligence.acquisition import (
-    ResearchCollectionError,
     ResearchCollector,
 )
 from app.research_intelligence.candidates import RankedCandidate, rank_candidates
+from app.research_intelligence.execution import (
+    RESEARCH_ACQUISITION_BUDGET_SECONDS,
+    ProgressCallback,
+    run_searches_concurrently,
+)
 from app.research_intelligence.matching import (
     DEFAULT_MATCH_POLICY,
     ConceptOverlapMatcher,
+    ReportsJudgingFailures,
     ResearchMatchPolicy,
     ResearchMatchVerdict,
     SemanticMatcher,
@@ -69,10 +75,21 @@ class ResearchQueryOutcome(BaseModel):
     # Present only on failure. A failed search is reported, never hidden,
     # and never silently treated as a search that found nothing.
     error: str | None = None
+    # How this search ended. `error is not None` no longer tells the
+    # whole story: a search that TIMED_OUT is still running at the
+    # provider, and an operator needs to see that distinctly.
+    status: ResearchQueryStatus = ResearchQueryStatus.SUCCEEDED
+    provider_job_id: str | None = None
+    records_received: int = 0
+    elapsed_seconds: float | None = None
 
     @property
     def succeeded(self) -> bool:
-        return self.error is None
+        return self.status is ResearchQueryStatus.SUCCEEDED
+
+    @property
+    def timed_out(self) -> bool:
+        return self.status is ResearchQueryStatus.TIMED_OUT
 
 
 class ResearchEnrichmentResult(BaseModel):
@@ -92,10 +109,57 @@ class ResearchEnrichmentResult(BaseModel):
     # Judged, but scored below the threshold. Counted so a run that
     # produces no matches is distinguishable from one that judged nothing.
     matches_rejected: int = 0
+    # How many times the MATCHER itself failed, as distinct from how many
+    # papers it declined. Zero for a deterministic matcher, which cannot
+    # fail. Non-zero is the only honest evidence that a run's empty
+    # result says nothing about the research.
+    judging_failures: int = 0
 
     @property
     def failed_queries(self) -> list[str]:
         return [outcome.query for outcome in self.queries if not outcome.succeeded]
+
+    @property
+    def timed_out_queries(self) -> list[str]:
+        return [outcome.query for outcome in self.queries if outcome.timed_out]
+
+    @property
+    def successful_queries(self) -> list[str]:
+        return [outcome.query for outcome in self.queries if outcome.succeeded]
+
+    @property
+    def is_partial(self) -> bool:
+        """Some searches worked and some did not.
+
+        Not the same as `failed_queries` being non-empty: a run where
+        EVERY search failed is not partial, it is a failure, and the
+        enrichment layer treats the two differently.
+        """
+        return bool(self.successful_queries) and bool(self.failed_queries)
+
+    @property
+    def acquisition_warning(self) -> str | None:
+        """One operator-facing sentence about incomplete acquisition.
+
+        None when all three searches worked. Never contains a credential,
+        a URL, or a provider payload -- only counts and query text that
+        GapRadar generated itself.
+        """
+        if not self.failed_queries:
+            return None
+        total = len(self.queries)
+        ok = len(self.successful_queries)
+        timed_out = len(self.timed_out_queries)
+        failed = len(self.failed_queries) - timed_out
+        parts: list[str] = []
+        if timed_out:
+            parts.append(f"{timed_out} timed out")
+        if failed:
+            parts.append(f"{failed} failed")
+        return (
+            f"{ok} of {total} research searches completed ({', '.join(parts)}); "
+            "results below come from the searches that returned"
+        )
 
 
 def enrich_opportunity_with_research(
@@ -107,6 +171,8 @@ def enrich_opportunity_with_research(
     matcher: SemanticMatcher | None = None,
     policy: ResearchMatchPolicy = DEFAULT_MATCH_POLICY,
     commit: bool = True,
+    on_progress: ProgressCallback | None = None,
+    acquisition_budget_seconds: float = RESEARCH_ACQUISITION_BUDGET_SECONDS,
 ) -> ResearchEnrichmentResult:
     """Find and judge research for ONE opportunity.
 
@@ -120,11 +186,24 @@ def enrich_opportunity_with_research(
             implementations so a caller that has no LLM wired up still
             gets a working, honest pipeline.
         policy: relevance threshold and candidate cap.
+        on_progress: called after every per-query state transition so a
+            caller can persist progress the frontend can poll. The
+            frontend is forbidden from inventing stage progress with a
+            timer, so this is how honest progress becomes available.
+        acquisition_budget_seconds: total wall-clock ceiling for all
+            searches together. Because they run concurrently this is
+            close to the slowest query, not the sum.
 
     Partial failure is expected, not exceptional: if one of the three
-    searches fails, the other two still ingest, rank, judge and persist.
-    The failure is recorded on its ResearchQueryOutcome so the caller can
-    see the enrichment was incomplete rather than assume it was thin.
+    searches fails or times out, the other two still ingest, rank, judge
+    and persist. The failure is recorded on its ResearchQueryOutcome, and
+    summarised by `acquisition_warning`, so the caller can see the
+    enrichment was incomplete rather than assume it was thin. Nothing is
+    fabricated to stand in for the search that did not return.
+
+    The searches run CONCURRENTLY and under a bounded budget, so one slow
+    provider job costs the enrichment its own duration rather than
+    blocking the two that already finished.
 
     Re-running is safe. Papers upsert by arxiv_id, and match rows upsert
     by (signal_id, research_paper_id), so a second run updates verdicts
@@ -139,11 +218,22 @@ def enrich_opportunity_with_research(
     plan = generator.generate(context)
 
     outcomes, paper_ids = _run_searches(
-        session, plan=plan, signal_id=signal.id, collector=collector
+        session,
+        plan=plan,
+        signal_id=signal.id,
+        collector=collector,
+        on_progress=on_progress,
+        acquisition_budget_seconds=acquisition_budget_seconds,
     )
     papers = _load_papers(session, paper_ids)
 
     candidates = rank_candidates(context, plan, papers, limit=policy.candidate_limit)
+    logger.info(
+        "[research-enrichment] semantic matching started candidates=%d papers=%d",
+        len(candidates),
+        len(papers),
+    )
+    failures_before = _judging_failures(matcher)
     created, updated, rejected = _judge_and_persist(
         session,
         signal_id=signal.id,
@@ -167,6 +257,7 @@ def enrich_opportunity_with_research(
         matches_created=created,
         matches_updated=updated,
         matches_rejected=rejected,
+        judging_failures=_judging_failures(matcher) - failures_before,
     )
     logger.info(
         "opportunity_research_enriched",
@@ -190,34 +281,60 @@ def _run_searches(
     plan: ResearchQueryPlan,
     signal_id: uuid.UUID,
     collector: ResearchCollector,
+    on_progress: ProgressCallback | None = None,
+    acquisition_budget_seconds: float = RESEARCH_ACQUISITION_BUDGET_SECONDS,
 ) -> tuple[list[ResearchQueryOutcome], list[uuid.UUID]]:
-    """Run each query, ingest what came back, and keep going on failure.
+    """Run every query concurrently, then ingest what came back.
+
+    The split matters. Searching is network-bound and independent, so it
+    is parallel and bounded. Ingestion writes through the Session, which
+    is NOT thread-safe, so it happens here, on one thread, in plan order.
 
     Paper ids are collected across all searches and deduped, so the same
     paper found by two queries is one candidate with two provenance
     trails -- which is the whole reason searches and papers are separate
     tables.
+
+    A search that failed or timed out contributes no papers and does not
+    stop the others from being ingested. That is the partial-result
+    policy: 25 real papers from two queries are worth more than nothing
+    from three.
     """
+    executions = run_searches_concurrently(
+        plan.queries,
+        collector=collector,
+        on_progress=on_progress,
+        total_budget_seconds=acquisition_budget_seconds,
+    )
+
     outcomes: list[ResearchQueryOutcome] = []
     paper_ids: list[uuid.UUID] = []
     seen: set[uuid.UUID] = set()
 
-    for query in plan.queries:
-        try:
-            collected = collector.search(query)
-        except ResearchCollectionError as exc:
-            # Reported, never hidden, and never allowed to discard the
-            # searches that worked.
+    for execution in executions:
+        if not execution.succeeded or execution.result is None:
             logger.warning(
-                "research_search_failed",
-                extra={"signal_id": str(signal_id), "query": query},
+                "[research-enrichment] query %s query=%r elapsed=%ss reason=%s",
+                execution.status.value,
+                execution.query,
+                execution.elapsed_seconds,
+                execution.error,
             )
-            outcomes.append(ResearchQueryOutcome(query=query, error=exc.message))
+            outcomes.append(
+                ResearchQueryOutcome(
+                    query=execution.query,
+                    error=execution.error,
+                    status=execution.status,
+                    provider_job_id=execution.provider_job_id,
+                    elapsed_seconds=execution.elapsed_seconds,
+                )
+            )
             continue
 
+        collected = execution.result
         ingestion = ingest_arxiv_search_results(
             session,
-            query=query,
+            query=execution.query,
             records=collected.records,
             signal_id=signal_id,
             searched_at=collected.searched_at or datetime.now(UTC),
@@ -232,16 +349,49 @@ def _run_searches(
                 seen.add(paper_id)
                 paper_ids.append(paper_id)
 
+        # Fed back so the persisted per-query state can report papers,
+        # not just raw provider records.
+        execution.search_run_id = ingestion.search_run_id
+        execution.papers_returned = len(ingestion.research_paper_ids)
+
         outcomes.append(
             ResearchQueryOutcome(
-                query=query,
+                query=execution.query,
                 search_run_id=ingestion.search_run_id,
                 papers_returned=len(ingestion.research_paper_ids),
                 papers_created=ingestion.created,
+                status=ResearchQueryStatus.SUCCEEDED,
+                provider_job_id=collected.provider_job_id,
+                records_received=execution.records_received,
+                elapsed_seconds=execution.elapsed_seconds,
             )
         )
 
+    if on_progress is not None:
+        # A final snapshot, now carrying per-query paper counts.
+        on_progress(executions)
+
+    succeeded = sum(1 for e in executions if e.succeeded)
+    timed_out = sum(
+        1 for e in executions if e.status is ResearchQueryStatus.TIMED_OUT
+    )
+    failed = sum(1 for e in executions if e.status is ResearchQueryStatus.FAILED)
+    logger.info(
+        "[research-enrichment] acquisition complete successful=%d failed=%d "
+        "timed_out=%d papers=%d",
+        succeeded,
+        failed,
+        timed_out,
+        len(paper_ids),
+    )
     return outcomes, paper_ids
+
+
+def _judging_failures(matcher: SemanticMatcher) -> int:
+    """How many times this matcher has failed, or 0 if it cannot say."""
+    if isinstance(matcher, ReportsJudgingFailures):
+        return matcher.failures
+    return 0
 
 
 def _load_papers(

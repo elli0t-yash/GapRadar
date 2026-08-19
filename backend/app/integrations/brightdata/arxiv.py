@@ -138,12 +138,9 @@ class BrightDataArxivCollector:
             )
             provider_job_id = execution.external_run_id
             logger.info(
-                "research_search_triggered",
-                extra={
-                    "query": query,
-                    "provider_job_id": provider_job_id,
-                    "collector_id": self._collector_id,
-                },
+                "[brightdata-arxiv] triggered job=%s query=%r",
+                provider_job_id,
+                query,
             )
             self._await_completion(query, provider_job_id)
             output = self._client.get_collector_output(provider_job_id)
@@ -157,15 +154,11 @@ class BrightDataArxivCollector:
 
         completed_at = self._now()
         logger.info(
-            "research_search_completed",
-            extra={
-                "query": query,
-                "provider_job_id": provider_job_id,
-                "record_count": len(output.records),
-                "duration_seconds": round(
-                    (completed_at - started_at).total_seconds(), 2
-                ),
-            },
+            "[brightdata-arxiv] job=%s complete records=%d elapsed=%ss query=%r",
+            provider_job_id,
+            len(output.records),
+            round((completed_at - started_at).total_seconds(), 2),
+            query,
         )
         return ResearchCollectionResult(
             query=query,
@@ -184,7 +177,8 @@ class BrightDataArxivCollector:
         provider -- the job keeps running on Bright Data's side either
         way.
         """
-        deadline = self._now() + timedelta(seconds=self._polling.timeout_seconds)
+        deadline_started = self._now()
+        deadline = deadline_started + timedelta(seconds=self._polling.timeout_seconds)
         polls = 0
         while True:
             polls += 1
@@ -200,11 +194,9 @@ class BrightDataArxivCollector:
                     f"{polls} poll(s); the provider job was not cancelled",
                 )
             logger.info(
-                "research_search_polling",
-                extra={
-                    "query": query,
-                    "provider_job_id": provider_job_id,
-                    "polls": polls,
-                },
+                "[brightdata-arxiv] job=%s running poll=%d elapsed=%ss",
+                provider_job_id,
+                polls,
+                round((self._now() - deadline_started).total_seconds(), 1),
             )
             self._sleep(self._polling.interval_seconds)

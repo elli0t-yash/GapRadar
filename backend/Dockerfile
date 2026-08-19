@@ -32,4 +32,4 @@ USER app
 
 EXPOSE 8000
 
-ENTRYPOINT ["./scripts/start.sh"]
+CMD ["./scripts/start.sh"]

@@ -3,6 +3,7 @@ import "./Navbar.css";
 
 const NAV_ITEMS = [
   { to: "/trends", label: "Trends" },
+  { to: "/reliability", label: "Reliability" },
   { to: "/saved", label: "Saved" },
 ];
 

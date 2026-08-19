@@ -1,0 +1,66 @@
+{
+  "scenario": "recallguard_self_healing_v1",
+  "mode": "fixture_replay",
+  "collector": {
+    "name": "RecallGuard self-healing demo",
+    "provider": "fixture_replay",
+    "external_collector_id": "gapradar-recallguard-self-healing-v1",
+    "source_name": "RecallGuard fixture replay namespace",
+    "source_url": "https://example.invalid/gapradar/recallguard-self-healing-v1"
+  },
+  "classification": {
+    "severity": "high",
+    "confidence": 0.838,
+    "affected_fields": ["hazard", "remedy"]
+  },
+  "coverage": {
+    "healthy": {
+      "title": 100,
+      "hazard": 98,
+      "remedy": 97,
+      "units": 94
+    },
+    "degraded": {
+      "title": 100,
+      "hazard": 20,
+      "remedy": 0,
+      "units": 100
+    },
+    "bad_repair": {
+      "title": 40,
+      "hazard": 100,
+      "remedy": 100,
+      "units": 100
+    },
+    "good_repair": {
+      "title": 100,
+      "hazard": 100,
+      "remedy": 100,
+      "units": 100
+    }
+  },
+  "repairs": [
+    {
+      "attempt": 1,
+      "label": "Broad selector rewrite",
+      "changes": [
+        "hazard: replace the stale text selector with a structural fallback",
+        "remedy: recover the missing remedy block from the result card",
+        "title: broaden the card selector"
+      ],
+      "expected_outcome": "rejected",
+      "coverage_key": "bad_repair"
+    },
+    {
+      "attempt": 2,
+      "label": "Scoped field repair",
+      "changes": [
+        "hazard: use the stable field container",
+        "remedy: use the stable field container",
+        "title: preserve the healthy title selector"
+      ],
+      "expected_outcome": "approved",
+      "coverage_key": "good_repair"
+    }
+  ]
+}

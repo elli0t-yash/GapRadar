@@ -397,6 +397,7 @@ def resume_unfinished_pipeline_runs(
     session: Session,
     client: BrightDataClient,
     *,
+    collector_id: uuid.UUID | None = None,
     timeout_seconds: float = DEFAULT_DRIVE_TIMEOUT_SECONDS,
     interval_seconds: float = DEFAULT_DRIVE_INTERVAL_SECONDS,
     now: Callable[[], datetime] = _utcnow,
@@ -409,17 +410,33 @@ def resume_unfinished_pipeline_runs(
     the PipelineRun row and its provider job id are not, so a later
     scheduled invocation rejoins the same Bright Data collection instead
     of abandoning it or starting another.
+
+    `collector_id` narrows recovery to ONE collector. Omitting it keeps
+    the original every-collector behaviour, which is what the
+    every-collector scheduler (app.jobs.daily_pipeline) wants.
+
+    A caller scoped to a single collector MUST pass it. Resuming means
+    polling -- and, for a QUEUED run, TRIGGERING -- a provider job, so an
+    unscoped resume inside a single-collector job would let that job
+    advance, and potentially start, collections it has no business
+    touching.
     """
+    conditions = [PipelineRun.status.in_(ACTIVE_STATUSES)]
+    if collector_id is not None:
+        conditions.append(PipelineRun.collector_id == collector_id)
+
     pending = list(
         session.execute(
-            select(PipelineRun)
-            .where(PipelineRun.status.in_(ACTIVE_STATUSES))
-            .order_by(PipelineRun.created_at)
+            select(PipelineRun).where(*conditions).order_by(PipelineRun.created_at)
         ).scalars()
     )
     if pending:
         logger.info(
-            "pipeline_runs_resuming", extra={"pipeline_run_count": len(pending)}
+            "pipeline_runs_resuming",
+            extra={
+                "pipeline_run_count": len(pending),
+                "collector_id": str(collector_id) if collector_id else None,
+            },
         )
 
     return [

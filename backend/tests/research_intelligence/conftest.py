@@ -17,6 +17,7 @@ from app.db.models import Signal
 from tests.api.conftest import (  # noqa: F401 - re-exported API fixtures
     api_client,
     brightdata_settings,
+    enrichment_scheduler,
     make_api_client,
     scheduler,
 )

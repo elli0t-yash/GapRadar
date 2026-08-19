@@ -19,7 +19,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import ReliabilityIncident
 from app.domain.enums import (
@@ -139,6 +139,234 @@ class ReliabilityOverviewRead(BaseModel):
     collectors: list[CollectorReliabilityRead] = []
     active_incident_count: int = 0
     recovered_incident_count: int = 0
+
+
+class DemoFieldHealth(BaseModel):
+    """One field-level coverage comparison from the isolated replay fixture."""
+
+    model_config = ConfigDict(frozen=True)
+
+    field: str
+    baseline_pct: float
+    current_pct: float
+    drop_pct: float | None = None
+    status: str
+
+
+class DemoVerificationResult(BaseModel):
+    """One regression-guard assertion for a proposed repair."""
+
+    model_config = ConfigDict(frozen=True)
+
+    field: str
+    before_pct: float
+    after_pct: float
+    status: str
+
+
+class DemoRepairAttempt(BaseModel):
+    """Persisted evidence for one deterministic repair proposal."""
+
+    model_config = ConfigDict(frozen=True)
+
+    attempt: int
+    label: str
+    status: str
+    changes: list[str] = []
+    verification: list[DemoVerificationResult] = []
+
+
+class DemoFidelityProof(BaseModel):
+    """The final, inspectable proof shown by the hackathon dashboard."""
+
+    model_config = ConfigDict(frozen=True)
+
+    schema_fidelity: str
+    semantic_fidelity: str
+    source_fidelity: str
+    decision: str
+
+
+class RecallGuardDemoRead(BaseModel):
+    """Backend-owned presentation state for the isolated fixture replay.
+
+    The status is intentionally a demo presentation state rather than a new
+    ReliabilityState enum. Core RecallGuard correctly considers a recovered
+    collector HEALTHY; this view preserves the stronger historical statement
+    that this particular demo session reached SELF_HEALED.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    scenario: str
+    mode: str
+    session_id: uuid.UUID | None = None
+    collector_id: uuid.UUID | None = None
+    collector_name: str
+    provider: str
+    external_collector_id: str
+    status: str
+    core_status: str
+    terminal: bool = False
+    incident_id: uuid.UUID | None = None
+    classification: str | None = None
+    severity: str | None = None
+    confidence: float | None = None
+    recommended_action: str | None = None
+    affected_fields: list[str] = []
+    field_health: list[DemoFieldHealth] = []
+    repair_attempts: list[DemoRepairAttempt] = []
+    timeline: list[IncidentEvent] = []
+    proof: DemoFidelityProof | None = None
+    started_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class LiveEvidenceCollector(BaseModel):
+    """Identity of the one isolated real Bright Data healing collector."""
+
+    model_config = ConfigDict(frozen=True)
+
+    collector_id: uuid.UUID
+    name: str
+    provider: str
+    external_collector_id: str
+
+
+class LiveEvidenceInvalidRecord(BaseModel):
+    """A bounded, display-safe projection of one persisted contract failure."""
+
+    model_config = ConfigDict(frozen=True)
+
+    index: int | None = None
+    problem: str | None = None
+    field: str
+    value: float
+    allowed_min: float
+    allowed_max: float
+    reason: str
+    detail: str | None = None
+
+
+class LiveEvidenceRun(BaseModel):
+    """One real provider job and the counts persisted by its orchestrator."""
+
+    model_config = ConfigDict(frozen=True)
+
+    collector_run_id: uuid.UUID
+    provider_job_id: str
+    status: str
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    fetched_record_count: int
+    valid_record_count: int
+    invalid_record_count: int
+    accepted_record_count: int
+
+
+class LiveEvidenceDetection(BaseModel):
+    """RecallGuard's persisted verdict on the broken provider job."""
+
+    model_config = ConfigDict(frozen=True)
+
+    incident_id: uuid.UUID
+    detected_at: datetime
+    observed_record_count: int
+    field: str
+    classification: str
+    severity: str | None = None
+    confidence: float | None = None
+    recommended_action: str
+
+
+class LiveEvidenceRepairAttempt(BaseModel):
+    """Provider candidate evidence retained on the real incident."""
+
+    model_config = ConfigDict(frozen=True)
+
+    attempt: int
+    status: str
+    provider_status: str | None = None
+    has_diff: bool | None = None
+    preview_records: int | None = None
+    preview_valid_records: int | None = None
+    preview_invalid_records: int | None = None
+    deployed: bool = False
+    patch_available: bool = False
+    before_logic: str | None = None
+    after_logic: str | None = None
+    note: str | None = None
+
+
+class LiveEvidenceVerificationSample(BaseModel):
+    """A record accepted from the fresh real Bright Data verification run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    problem: str
+    tam_score: float
+
+
+class LiveEvidenceFailedCheck(BaseModel):
+    """One persisted regression check that blocked recovery."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    expected: str | None = None
+    observed: str | None = None
+    detail: str | None = None
+
+
+class LiveEvidenceVerification(BaseModel):
+    """Fresh-provider-run contract result and RecallGuard's final verdict."""
+
+    model_config = ConfigDict(frozen=True)
+
+    run: LiveEvidenceRun
+    samples: list[LiveEvidenceVerificationSample] = Field(default_factory=list)
+    contract_validation: str
+    regression_result: str
+    failed_checks: list[LiveEvidenceFailedCheck] = Field(default_factory=list)
+    final_decision: str
+    final_status: str
+    recovery_proof: dict[str, Any] | None = None
+
+
+class LiveEvidenceAutomationStage(BaseModel):
+    """Honest accounting of how the historical end-to-end flow was driven."""
+
+    model_config = ConfigDict(frozen=True)
+
+    stage: str
+    automation: str
+    result: str
+    detail: str
+
+
+class LiveBrightDataEvidenceRead(BaseModel):
+    """Read-only proof from the isolated historical Bright Data experiment.
+
+    This intentionally cannot masquerade as the deterministic fixture replay.
+    Missing provider artifacts remain missing rather than being reconstructed
+    from comments, tests, or fixture values.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    available: bool
+    mode: str = "persisted_real_brightdata_run"
+    live_trigger_safe: bool = False
+    live_trigger_reason: str
+    collector: LiveEvidenceCollector | None = None
+    broken_run: LiveEvidenceRun | None = None
+    invalid_records: list[LiveEvidenceInvalidRecord] = Field(default_factory=list)
+    detection: LiveEvidenceDetection | None = None
+    repair_attempts: list[LiveEvidenceRepairAttempt] = Field(default_factory=list)
+    repair_patch_available: bool = False
+    repair_patch_note: str
+    verification: LiveEvidenceVerification | None = None
+    automation: list[LiveEvidenceAutomationStage] = Field(default_factory=list)
 
 
 def build_timeline(incident: ReliabilityIncident) -> list[IncidentEvent]:

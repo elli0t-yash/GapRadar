@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, NetworkError } from "../api/client";
-import { getOpportunity, getOpportunityResearch } from "../api/opportunities";
+import {
+  getOpportunity,
+  getOpportunityResearch,
+  getResearchEnrichment,
+  startResearchEnrichment,
+} from "../api/opportunities";
 import { toProblem } from "../api/adapters";
-import type { ResearchIntelligence } from "../api/types";
+import type {
+  ResearchEnrichmentStatus,
+  ResearchEnrichmentCounters,
+  ResearchOutcomeReason,
+  ResearchQueryState,
+  ResearchIntelligence,
+} from "../api/types";
+import { isEnrichmentTerminal } from "../api/types";
 import type { Problem } from "../types";
 import { ResearchSection } from "./ResearchSection";
 import { formatRelativeDate } from "../utils/formatDate";
@@ -29,6 +41,16 @@ function describeError(error: unknown): string {
 
   return "Something went wrong.";
 }
+
+// A run that has reported nothing yet, and the shape old runs
+// (counters={}) deserialize to. Frozen so no consumer can mutate the
+// shared default.
+const EMPTY_COUNTERS: ResearchEnrichmentCounters = Object.freeze({
+  discovered: 0,
+  selected: 0,
+  judged: 0,
+  matched: 0,
+});
 
 export function ProblemDetail({
   problem,
@@ -126,6 +148,142 @@ export function ProblemDetail({
   const retryResearch = useCallback(() => {
     setResearchAttempt((n) => n + 1);
   }, []);
+
+  // --- on-demand research enrichment -----------------------------------
+  // Reflected from the backend job. Nothing in this block starts work:
+  // `analyse` runs only from the button, and the effects only read.
+  const [enrichmentStatus, setEnrichmentStatus] =
+    useState<ResearchEnrichmentStatus | null>(null);
+  const [enrichmentError, setEnrichmentError] = useState<string | null>(null);
+  const [enrichmentWarning, setEnrichmentWarning] = useState<string | null>(
+    null,
+  );
+  // Backend-reported per-query progress. Never synthesised, never
+  // advanced on a timer: an empty list means the backend has not said
+  // anything yet, and the UI says exactly that.
+  const [enrichmentQueryStates, setEnrichmentQueryStates] = useState<
+    ResearchQueryState[]
+  >([]);
+  const [enrichmentCounters, setEnrichmentCounters] =
+    useState<ResearchEnrichmentCounters>(EMPTY_COUNTERS);
+  // Typed outcome + backend-computed retryability. Reflected verbatim:
+  // this component never decides whether a retry makes sense.
+  const [enrichmentOutcomeReason, setEnrichmentOutcomeReason] =
+    useState<ResearchOutcomeReason | null>(null);
+  const [enrichmentIsRetryable, setEnrichmentIsRetryable] = useState(false);
+  // Guards a genuine double-click. StrictMode re-invokes effects, never
+  // handlers, so this is the only race it has to close -- the backend's
+  // active-job constraint stays the authority.
+  const starting = useRef(false);
+  // The same guard, as state, so the button can be disabled the instant
+  // it is pressed. The ref alone cannot do that: mutating it does not
+  // re-render, which is what left the CTA clickable during the POST.
+  const [enrichmentStarting, setEnrichmentStarting] = useState(false);
+
+  // Adopt a job already running for this opportunity so a reload mid-run
+  // shows progress instead of the call to action. A pure read.
+  useEffect(() => {
+    let active = true;
+
+    setEnrichmentStatus(null);
+    setEnrichmentError(null);
+    setEnrichmentWarning(null);
+    setEnrichmentQueryStates([]);
+    setEnrichmentCounters(EMPTY_COUNTERS);
+    setEnrichmentOutcomeReason(null);
+    setEnrichmentIsRetryable(false);
+
+    getResearchEnrichment(problem.id)
+      .then((job) => {
+        if (!active || !job) return;
+
+        setEnrichmentStatus(job.status);
+        setEnrichmentQueryStates(job.query_states);
+        setEnrichmentCounters(job.counters);
+        setEnrichmentWarning(job.warning);
+        setEnrichmentOutcomeReason(job.outcome_reason);
+        setEnrichmentIsRetryable(job.is_retryable);
+        if (job.status === "failed") setEnrichmentError(job.error);
+      })
+      .catch(() => {
+        // A status read failing must never block the call to action.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [problem.id]);
+
+  // Poll only while a job is active, and stop as soon as it is terminal.
+  useEffect(() => {
+    if (enrichmentStatus !== "queued" && enrichmentStatus !== "running") return;
+
+    let active = true;
+
+    const timer = window.setInterval(() => {
+      getResearchEnrichment(problem.id)
+        .then((job) => {
+          if (!active || !job) return;
+
+          setEnrichmentStatus(job.status);
+          setEnrichmentQueryStates(job.query_states);
+          setEnrichmentCounters(job.counters);
+          setEnrichmentWarning(job.warning);
+          setEnrichmentOutcomeReason(job.outcome_reason);
+          setEnrichmentIsRetryable(job.is_retryable);
+          if (job.status === "failed") setEnrichmentError(job.error);
+          if (isEnrichmentTerminal(job.status)) {
+            window.clearInterval(timer);
+            // The job is finished; the research read model is now the
+            // truth, so refetch it rather than trusting the job record.
+            if (job.status === "succeeded") setResearchAttempt((n) => n + 1);
+          }
+        })
+        .catch(() => {
+          // A dropped poll is retryable: the job is safe server-side.
+        });
+    }, 4000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [problem.id, enrichmentStatus]);
+
+  // THE ONLY CALL THAT SPENDS A PROVIDER RUN. Invoked from the button and
+  // from nowhere else -- never from an effect, never on mount.
+  const analyse = useCallback(() => {
+    if (starting.current) return;
+    starting.current = true;
+    setEnrichmentStarting(true);
+
+    setEnrichmentError(null);
+    setEnrichmentWarning(null);
+    setEnrichmentQueryStates([]);
+    setEnrichmentCounters(EMPTY_COUNTERS);
+    setEnrichmentOutcomeReason(null);
+    setEnrichmentIsRetryable(false);
+    setEnrichmentStatus("queued");
+
+    startResearchEnrichment(problem.id)
+      .then((accepted) => {
+        // already_enriched and already_running are both SUCCESS answers.
+        if (accepted.already_enriched) {
+          setEnrichmentStatus("succeeded");
+          setResearchAttempt((n) => n + 1);
+          return;
+        }
+        setEnrichmentStatus(accepted.status);
+      })
+      .catch((error) => {
+        setEnrichmentStatus("failed");
+        setEnrichmentError(describeError(error));
+      })
+      .finally(() => {
+        starting.current = false;
+        setEnrichmentStarting(false);
+      });
+  }, [problem.id]);
 
   return (
     <div className="problem-detail-overlay" onClick={onClose}>
@@ -248,6 +406,15 @@ export function ProblemDetail({
           loading={researchLoading}
           error={researchError}
           onRetry={retryResearch}
+          enrichmentStatus={enrichmentStatus}
+          enrichmentError={enrichmentError}
+          enrichmentQueryStates={enrichmentQueryStates}
+          enrichmentCounters={enrichmentCounters}
+          enrichmentOutcomeReason={enrichmentOutcomeReason}
+          enrichmentIsRetryable={enrichmentIsRetryable}
+          enrichmentStarting={enrichmentStarting}
+          enrichmentWarning={enrichmentWarning}
+          onAnalyse={analyse}
         />
       </div>
     </div>

@@ -286,3 +286,193 @@
 @media (prefers-reduced-motion: reduce) {
   .research-skeleton-line { animation: none; }
 }
+
+/* -- analyse call to action / in-progress --------------------------------- */
+/* Same warm cream/orange language as the rest of the modal: every colour is
+   an existing token, no new palette. */
+
+.research-notice.is-cta {
+  border-style: solid;
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.research-analyse {
+  margin-top: var(--space-3);
+  padding: 9px 22px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--bg-raised);
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 120ms ease;
+}
+
+.research-analyse:hover {
+  background: var(--accent-2);
+}
+
+.research-analyse:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.research-notice-footnote {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.research-notice.is-working {
+  border-style: solid;
+  border-color: var(--accent-border);
+  background: var(--bg-raised);
+  text-align: left;
+}
+
+.research-notice.is-working .research-notice-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+/* The stages describe WHAT the analysis does. They are not a live position
+   within it: the backend reports queued/running/succeeded/failed and nothing
+   finer, so highlighting a "current" stage would be inventing detail. */
+.research-stages {
+  margin: var(--space-3) 0 var(--space-3);
+  padding: 0 0 0 var(--space-4);
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.research-stages li {
+  position: relative;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.research-stages li::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-4) * -1 + 6px);
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-2);
+}
+
+.research-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-border);
+  border-top-color: var(--accent);
+  animation: research-spin 700ms linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes research-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .research-spinner { animation: none; }
+}
+
+/* Backend-driven progress list. Each row's state comes from a persisted
+   per-query status, so nothing here animates "progress" that has not
+   actually happened -- the spinner is the only moving part. */
+.research-stages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs, 0.375rem);
+  margin: var(--space-sm, 0.75rem) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.research-stage {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-xs, 0.5rem);
+  font-size: var(--fs-sm, 0.875rem);
+  color: var(--text-h, #3a1e00);
+}
+
+.research-stage-mark {
+  color: var(--accent, #ff6a00);
+  font-weight: 600;
+  text-align: center;
+}
+
+.research-stage-detail {
+  color: var(--accent-text, #a34500);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.research-stage.is-waiting {
+  opacity: 0.55;
+}
+
+.research-stage.is-done .research-stage-label {
+  font-weight: 600;
+}
+
+/* A search that did not return, surfaced while the run continues. */
+.research-notice-warning {
+  margin: var(--space-sm, 0.75rem) 0 0;
+  padding: var(--space-xs, 0.5rem) var(--space-sm, 0.75rem);
+  border-left: 2px solid var(--accent-border, #ffd0ad);
+  background: var(--accent-bg, #fff2e8);
+  border-radius: var(--radius-sm, 6px);
+  font-size: var(--fs-sm, 0.875rem);
+  color: var(--accent-text, #a34500);
+}
+
+/* A completed-but-partial run, shown above real results. */
+.research-partial-warning {
+  margin: 0 0 var(--space-sm, 0.75rem);
+  padding: var(--space-xs, 0.5rem) var(--space-sm, 0.75rem);
+  border: 1px solid var(--accent-border, #ffd0ad);
+  background: var(--accent-bg, #fff2e8);
+  border-radius: var(--radius-sm, 6px);
+  font-size: var(--fs-sm, 0.875rem);
+  color: var(--accent-text, #a34500);
+}
+
+.research-analyse:disabled,
+.research-retry:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* A completed scan that found nothing above the threshold. Success
+   styling, deliberately: the run worked, and the answer is "none". Any
+   error treatment here would report a failure that did not happen. */
+.research-notice.is-complete {
+  border: 1px solid var(--accent-border, #ffd0ad);
+  background: var(--bg, #fffaf5);
+}
+
+/* A dead end: no search specific enough could be formed. Calm and
+   neutral -- nothing failed, and there is no action to offer. */
+.research-notice.is-dead-end {
+  border: 1px dashed var(--accent-border, #ffd0ad);
+  background: var(--bg, #fffaf5);
+}
+
+.research-notice.is-dead-end .research-notice-title,
+.research-notice.is-complete .research-notice-title {
+  color: var(--text-h, #3a1e00);
+}
