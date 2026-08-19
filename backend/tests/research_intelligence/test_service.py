@@ -59,14 +59,15 @@ def test_a_validated_batch_is_ingested_whole(
         db_session, query=VALIDATED_QUERY, records=records, searched_at=SEARCHED_AT
     )
 
-    assert result.created == 15
+    expected = len(records)
+    assert result.created == expected
     assert result.updated == 0
     assert result.unchanged == 0
     assert result.rejected == []
-    assert result.accepted == 15
-    assert len(result.research_paper_ids) == 15
-    assert count(db_session, ResearchPaper) == 15
-    assert count(db_session, ResearchSearchResult) == 15
+    assert result.accepted == expected
+    assert len(result.research_paper_ids) == expected
+    assert count(db_session, ResearchPaper) == expected
+    assert count(db_session, ResearchSearchResult) == expected
 
 
 def test_a_persisted_paper_keeps_every_normalized_field(db_session: Session) -> None:
@@ -100,7 +101,7 @@ def test_result_order_is_preserved_as_the_search_ranking(
             .order_by(ResearchSearchResult.position)
         ).scalars()
     )
-    assert [row.position for row in rows] == list(range(15))
+    assert [row.position for row in rows] == list(range(len(records)))
     assert [row.research_paper_id for row in rows] == result.research_paper_ids
 
 
@@ -118,16 +119,17 @@ def test_re_ingesting_the_same_batch_creates_no_new_papers(
         db_session, query=VALIDATED_QUERY, records=records
     )
 
-    assert first.created == 15
+    expected = len(records)
+    assert first.created == expected
     assert second.created == 0
     assert second.updated == 0
     # Observably a no-op on the papers -- not "updated", which would churn
     # updated_at on every search and make idempotency untestable.
-    assert second.unchanged == 15
-    assert count(db_session, ResearchPaper) == 15
+    assert second.unchanged == expected
+    assert count(db_session, ResearchPaper) == expected
     # The search genuinely happened twice, so both runs are recorded.
     assert count(db_session, ResearchSearchRun) == 2
-    assert count(db_session, ResearchSearchResult) == 30
+    assert count(db_session, ResearchSearchResult) == expected * 2
 
 
 def test_a_revised_paper_updates_the_existing_row(db_session: Session) -> None:

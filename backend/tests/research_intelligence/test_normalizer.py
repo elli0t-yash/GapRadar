@@ -31,15 +31,15 @@ def reason_of(record: dict[str, Any]) -> ResearchRejectionReason:
 def test_every_validated_collector_record_normalizes(
     arxiv_records: list[dict[str, Any]],
 ) -> None:
-    """The 15 records Codex validated must all survive ingestion.
+    """Real validated collector records must all survive ingestion.
 
     This is the handoff contract itself: if the collector's output shape
     and this normalizer ever disagree, that is the failure to catch.
     """
     papers = [normalize_arxiv_record(record) for record in arxiv_records]
 
-    assert len(papers) == 15
-    assert len({paper.arxiv_id for paper in papers}) == 15
+    assert len(papers) == len(arxiv_records)
+    assert len({paper.arxiv_id for paper in papers}) == len(arxiv_records)
     assert all(paper.title and paper.abstract for paper in papers)
     assert all(paper.authors for paper in papers)
     assert all(paper.categories for paper in papers)

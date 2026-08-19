@@ -27,26 +27,16 @@ from tests.opportunity_engine.conftest import (
     make_source,
 )
 
-# The validated collector output, owned by the Bright Data side and NOT
-# tracked in git. Two consequences this has to handle:
+# Representative arXiv records, OWNED BY THE BACKEND and committed.
 #
-# - the path moves. It has already moved once (sample-results.json ->
-#   samples/dynamic-vehicle-routing.json) when the collector gained
-#   dynamic queries, so candidates are tried in order rather than one
-#   path being hardcoded;
-# - it can be absent entirely, in a fresh clone or in CI, because it is
-#   untracked. The fixture skips with a reason instead of erroring, so a
-#   missing collaborator artifact never reads as a backend regression.
-_ARXIV_ARTIFACTS = (
-    Path(__file__).resolve().parents[3] / "external" / "brightdata" / "arxiv"
-)
-_ARXIV_SAMPLE_CANDIDATES = (
-    _ARXIV_ARTIFACTS / "samples" / "dynamic-vehicle-routing.json",
-    _ARXIV_ARTIFACTS / "sample-results.json",
-)
-ARXIV_SAMPLE_FIXTURE = next(
-    (path for path in _ARXIV_SAMPLE_CANDIDATES if path.exists()),
-    _ARXIV_SAMPLE_CANDIDATES[0],
+# Previously this pointed into external/brightdata/arxiv/, which is
+# untracked and owned by the collector side. That made the backend test
+# contract depend on a collaborator's working directory: the path moved
+# once when the collector gained dynamic queries, and a fresh clone or CI
+# had no file at all. Three records copied here -- chosen for shape
+# variety, not volume -- pin the same nine-field contract deterministically.
+ARXIV_SAMPLE_FIXTURE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "research" / "arxiv_records.json"
 )
 
 VALIDATED_QUERY = "dynamic vehicle routing"
@@ -54,17 +44,11 @@ VALIDATED_QUERY = "dynamic vehicle routing"
 
 @pytest.fixture(scope="session")
 def arxiv_records() -> list[dict[str, Any]]:
-    """The validated collector output, verbatim.
+    """Representative validated collector records, verbatim.
 
-    Skipped rather than failed when the artifact is absent: it belongs to
-    the Bright Data side, is untracked, and its absence says nothing
-    about whether GapRadar's ingestion is correct.
+    Committed under the backend test tree, so this never skips and never
+    depends on anything outside `backend/`.
     """
-    if not ARXIV_SAMPLE_FIXTURE.exists():
-        pytest.skip(
-            f"Bright Data arXiv sample not present at {ARXIV_SAMPLE_FIXTURE}; "
-            "it is an untracked artifact owned by the collector side"
-        )
     return json.loads(ARXIV_SAMPLE_FIXTURE.read_text(encoding="utf-8"))
 
 

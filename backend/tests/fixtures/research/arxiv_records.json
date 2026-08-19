@@ -1,0 +1,59 @@
+[
+  {
+    "arxiv_id": "2608.13083",
+    "title": "AoI-Guaranteed Dynamic Route Planning for Connected Vehicles",
+    "abstract": "The advancement of Intelligent Transportation Sys- tems (ITS) has been significantly driven by progress in radio communication technology. Dynamic route planning, a key com- ponent of ITS, traditionally focuses on metrics such as route capacity and travel time. This paper presents a novel dual- factor approach that integrates travel time estimation and radio resource availability into an innovative route-planning scheme for connected vehicles (CVs). To address this dual-objective route planning challenge, we employ Deep Reinforcement Learning (DRL). Our approach, called AoI-Guaranteed Dynamic Route Planning (AGDRP), effectively balances travel time and Age of Information (AoI), enhancing route planning performance through adaptive learning over time. Simulation results demon- strate that AGDRP outperforms the baseline scheme, which solely focuses on travel time optimization. In fact, we show that incor- porating AoI minimization significantly enhances route planning performance beyond conventional travel-time-based approaches.",
+    "authors": [
+      "Sajedeh Norouzi",
+      "Maryam Ansarifard",
+      "Farshad Zeinali",
+      "Ali Nouruzi",
+      "Nader Mokari",
+      "Hamid Saeedi",
+      "Nizar Zorba"
+    ],
+    "published_at": "2026-08-13",
+    "categories": [
+      "Systems and Control (eess.SY)"
+    ],
+    "paper_url": "https://arxiv.org/abs/2608.13083",
+    "pdf_url": "https://arxiv.org/pdf/2608.13083",
+    "query": "dynamic vehicle routing"
+  },
+  {
+    "arxiv_id": "2607.16875",
+    "title": "A Deep Reinforcement Learning Algorithm for the Vehicle Routing Problem with Stochastic Demands and Outsourcing",
+    "abstract": "We introduce the vehicle routing problem with stochastic demands and outsourcing options (VRP-SDO), in which a logistics service provider partitions customer requests into customers outsourced to a common carrier and customers committed to its fixed fleet. The latter induces a vehicle routing problem with stochastic demands (VRP-SD), solved dynamically. Demands are revealed upon visit; residual demand may be served by other vehicles or after restocking at the depot. Work beyond the regular shift incurs overtime costs, and the unit outsourcing cost decreases with the expected outsourced demand. The objective is to minimize expected travel, overtime, and outsourcing costs. We propose an iterative two-level methodology whose first level partitions customers into committed and outsourced subsets, while the second level estimates the expected VRP-SD routing cost. To avoid solving this problem from scratch at every iteration, we learn an offline routing policy that estimates costs almost instantly for any committed subset. An iterated local search establishes the first-level partitions. We formulate the second level as a Markov decision process and solve it with a deep Q-network whose state is represented by a graph attention network aggregating customer and vehicle information by relevance to the acting vehicle. Trained offline on instances with variable customer cardinality and locations, the policy applies to any daily customer realization; online fine-tuning improves the cost approximation. Experiments show that our policy reduces routing costs by 19.6% relative to a state-of-the-art method and by at least 29.6% over classical heuristics. Our overall algorithm saves 13.7% on average over the version without the attention-based representation and generates high-quality decisions within minutes, whereas benchmarks without an offline-trained estimator require over an hour.",
+    "authors": [
+      "Mohsen Dastpak",
+      "Fausto Errico",
+      "Ola Jabali"
+    ],
+    "published_at": "2026-07-18",
+    "categories": [
+      "Optimization and Control (math.OC)",
+      "Artificial Intelligence (cs.AI)"
+    ],
+    "paper_url": "https://arxiv.org/abs/2607.16875",
+    "pdf_url": "https://arxiv.org/pdf/2607.16875",
+    "query": "dynamic vehicle routing"
+  },
+  {
+    "arxiv_id": "2607.22582",
+    "title": "Branch & Price & Cut for the Time-Dependent Vehicle Routing Problem with Time Windows (TDVRPTW)",
+    "abstract": "In urban contexts, travel times vary strongly with the time of day and traffic conditions. The Time-Dependent Vehicle Routing Problem with Time Windows (TDVRPTW) extends the classical VRPTW by making travel times depend on departure time, with the objective of minimizing the total travel time of at most $k$ vehicle routes serving customers within strict time windows. Exact resolution of this realistic yet understudied problem currently relies on the Branch \\& Price approach of Dabia et al. (2013), in which a Column Generation scheme decomposes the problem into a set-partitioning master problem and a resource-constrained shortest-path pricing problem solved by dynamic programming. This work, conducted within the MAMUT project (Machine Learning and Matheuristics for Urban Transport), aims to advance the state of the art for the exact and explainable resolution of the TDVRPTW. We propose to reimplement and revisit the pioneering Branch \\& Price algorithm by transferring recent advances made on the single-vehicle variant (TDTSPTW) to the multi-vehicle setting, notably an exact anytime extension of A* and a Large Neighborhood Search guided by dynamic programming for the pricing sub-problem. We further explore the integration of data mining and machine learning to guide column generation by exploiting knowledge from previously computed routes. The goal is a high-performance and interpretable solver that meets the requirements of real-world urban transport while preserving guarantees on solution quality.",
+    "authors": [
+      "Florian Rascoussier",
+      "Romain Billot",
+      "Lina Fahed",
+      "Christine Solnon"
+    ],
+    "published_at": "2026-06-08",
+    "categories": [
+      "Optimization and Control (math.OC)"
+    ],
+    "paper_url": "https://arxiv.org/abs/2607.22582",
+    "pdf_url": "https://arxiv.org/pdf/2607.22582",
+    "query": "dynamic vehicle routing"
+  }
+]
