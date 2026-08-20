@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -18,6 +19,7 @@ from app.db.models.mixins import CreatedAtMixin, TimestampMixin, UUIDPrimaryKeyM
 from app.domain.enums import ResearchSource
 
 if TYPE_CHECKING:
+    from app.db.models.investigation import Investigation
     from app.db.models.research_paper import ResearchPaper
     from app.db.models.signal import Signal
 
@@ -33,13 +35,34 @@ class ResearchSearchRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         when was it searched?                               -> searched_at
         which papers came back?                             -> ResearchSearchResult
 
-    `signal_id` is NULLABLE and points at `signals`, not at an
-    "opportunities" table -- there is none. An Opportunity is a read model
-    computed over a trusted Signal (app.opportunity_engine), so the Signal
-    is the only durable identity a search can be attributed to. Null means
-    the search was run without an originating opportunity: an operator
-    probe, a backfill, or an exploratory query. Recording those as
-    orphaned rather than refusing them keeps the provenance table honest.
+    EVERY SEARCH BELONGS TO EXACTLY ONE SUBJECT, enforced by a CHECK.
+
+    `signal_id` points at `signals`, not at an "opportunities" table --
+    there is none. An Opportunity is a read model computed over a trusted
+    Signal (app.opportunity_engine), so the Signal is the only durable
+    identity a market search can be attributed to. `investigation_id` is
+    the same idea for the other kind of subject: a user-supplied
+    hypothesis GapRadar was asked to research.
+
+    Both columns are nullable in the column sense and neither is optional
+    in the invariant sense: the constraint permits precisely
+
+        signal_id set, investigation_id null
+        investigation_id set, signal_id null
+
+    and rejects both-set and both-null. Both-set would make "which
+    problem was this searched for" unanswerable. BOTH-NULL was previously
+    allowed and is no longer: an unattributed search row is a provider
+    call nobody can explain, cannot be read back through any subject, and
+    silently inflates nothing while costing money -- so the table refuses
+    to record one rather than accumulating orphans that look like data.
+
+    Two nullable columns rather than a polymorphic (subject_type,
+    subject_id) pair, for the reason that decides every such choice in
+    this schema: a polymorphic id has no foreign key, so nothing stops it
+    pointing at a row that does not exist. The cost of that choice is
+    exactly this CHECK, which is cheap and is enforced by the database
+    rather than by whichever caller happens to be writing.
 
     `searched_at` is supplied by the caller rather than defaulted from
     `created_at`, because results can be handed to GapRadar well after
@@ -49,7 +72,22 @@ class ResearchSearchRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __tablename__ = "research_search_runs"
     __table_args__ = (
+        # A search belongs to EXACTLY one subject -- not "at most one".
+        #
+        # Written as an XOR over the two IS NOT NULL tests rather than as
+        # a NOT(both) because the two are not the same constraint: the
+        # weaker form permits a row that names no subject at all, which
+        # is a recorded provider call that no read model can ever surface
+        # and no operator can explain.
+        #
+        # Enforced in the database, not just in the service, because the
+        # service is not the only writer a schema outlives.
+        CheckConstraint(
+            "(signal_id IS NOT NULL) <> (investigation_id IS NOT NULL)",
+            name="ck_research_search_runs_single_subject",
+        ),
         Index("ix_research_search_runs_signal_id", "signal_id"),
+        Index("ix_research_search_runs_investigation_id", "investigation_id"),
         Index("ix_research_search_runs_searched_at", "searched_at"),
         # The natural lookup: "have we searched this query on this source
         # before, and what came back?"
@@ -58,6 +96,10 @@ class ResearchSearchRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # Nullable on purpose -- see the class docstring.
     signal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("signals.id"))
+    # The other kind of subject. Mutually exclusive with signal_id.
+    investigation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("investigations.id")
+    )
     source: Mapped[ResearchSource] = mapped_column(
         Enum(ResearchSource, name="research_source", native_enum=False, length=32),
         nullable=False,
@@ -77,6 +119,7 @@ class ResearchSearchRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     provider_job_id: Mapped[str | None] = mapped_column(String(255))
 
     signal: Mapped["Signal | None"] = relationship()
+    investigation: Mapped["Investigation | None"] = relationship()
     results: Mapped[list["ResearchSearchResult"]] = relationship(
         back_populates="search_run"
     )

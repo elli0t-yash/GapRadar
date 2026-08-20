@@ -26,7 +26,11 @@ from app.db.models import (
     Signal,
     Source,
 )
-from app.domain.enums import ResearchEnrichmentStatus, ResearchOutcomeReason
+from app.domain.enums import (
+    ResearchEnrichmentStatus,
+    ResearchOutcomeReason,
+    ResearchSubjectOrigin,
+)
 from app.integrations.openai.query_generator import _clean_queries
 from app.research_intelligence.acquisition import (
     ResearchCollectionError,
@@ -49,11 +53,11 @@ from app.research_intelligence.query_generation import (
     ResearchQueryProviderError,
 )
 from app.research_intelligence.schemas import (
-    MarketContext,
     ResearchEnrichmentRead,
     ResearchQueryPlan,
+    ResearchSubject,
 )
-from app.research_intelligence.service import market_context_from_signal
+from app.research_intelligence.service import research_subject_from_signal
 from tests.opportunity_engine.conftest import make_signal
 from tests.opportunity_engine.test_service import open_incident
 from tests.research_intelligence.conftest import arxiv_record_for
@@ -91,7 +95,7 @@ class AlwaysMatcher:
 
 def collector_for(db_session: Session, signal: Signal, *arxiv_ids: str):
     """A replay collector covering exactly this signal's generated plan."""
-    plan = ConceptQueryGenerator().generate(market_context_from_signal(signal))
+    plan = ConceptQueryGenerator().generate(research_subject_from_signal(signal))
     return SequenceResearchCollector(
         {plan.queries[0]: papers(*arxiv_ids), plan.queries[1]: [], plan.queries[2]: []},
         provider_job_id="j_test",
@@ -435,7 +439,7 @@ def test_a_successful_enrichment_shows_up_in_get_research(
 def test_a_plan_built_only_from_the_industry_name_is_refused() -> None:
     """The audit's junk shape: no provider job may be spent on it."""
     plan = ResearchQueryPlan(
-        signal_id=uuid.uuid4(),
+        subject_id=uuid.uuid4(),
         queries=[
             "travel systems optimization",
             "travel systems demand forecasting",
@@ -462,7 +466,7 @@ def test_malformed_plans_are_refused(
     queries: list[str], concepts: list[str], match: str
 ) -> None:
     plan = ResearchQueryPlan(
-        signal_id=uuid.uuid4(), queries=queries, concepts=concepts, rationale=""
+        subject_id=uuid.uuid4(), queries=queries, concepts=concepts, rationale=""
     )
 
     with pytest.raises(ResearchPlanRejectedError, match=match):
@@ -471,7 +475,7 @@ def test_malformed_plans_are_refused(
 
 def test_a_real_plan_passes_the_gate() -> None:
     plan = ResearchQueryPlan(
-        signal_id=uuid.uuid4(),
+        subject_id=uuid.uuid4(),
         queries=[
             "on-demand allocation urban freight",
             "urban freight optimization",
@@ -596,7 +600,7 @@ class SlowCollector:
 
 
 def plan_for(db_session: Session, signal: Signal) -> ResearchQueryPlan:
-    return ConceptQueryGenerator().generate(market_context_from_signal(signal))
+    return ConceptQueryGenerator().generate(research_subject_from_signal(signal))
 
 
 def test_three_successful_queries_succeed_with_no_warning(
@@ -1191,7 +1195,7 @@ def test_a_good_deterministic_plan_never_reaches_the_fallback(
     signal = cargo_signal(db_session, source, run)
     fallback = SpyFallback(
         ResearchQueryPlan(
-            signal_id=signal.id, queries=["a b", "c d", "e f"], concepts=["x"]
+            subject_id=signal.id, queries=["a b", "c d", "e f"], concepts=["x"]
         )
     )
     job, _ = start_enrichment(db_session, signal=signal)
@@ -1213,7 +1217,7 @@ def test_a_rejected_deterministic_plan_is_rescued_by_the_fallback(
     """The dead end this whole stage exists to remove."""
     signal = unmatched_signal(db_session, source, run)
     rescued = ResearchQueryPlan(
-        signal_id=signal.id,
+        subject_id=signal.id,
         queries=[
             "appointment scheduling optimization",
             "demand forecasting retail footfall",
@@ -1244,7 +1248,7 @@ def test_a_rejected_fallback_spends_nothing_and_is_not_retryable(
     # A plan built from the industry name alone -- exactly what the gate
     # exists to refuse, whoever produced it.
     junk = ResearchQueryPlan(
-        signal_id=signal.id,
+        subject_id=signal.id,
         queries=[
             "beauty systems",
             "beauty systems optimization",
@@ -1344,8 +1348,9 @@ def test_the_fallback_rejects_unusable_queries(
     queries: list[str], why: str
 ) -> None:
     """Every rejection here is a Bright Data job that is never bought."""
-    context = MarketContext(
-        signal_id=uuid.uuid4(),
+    context = ResearchSubject(
+        subject_id=uuid.uuid4(),
+        origin=ResearchSubjectOrigin.SIGNAL,
         problem="Why is it hard to find a good barber nearby?",
         description="People cannot find a nearby barber with open slots.",
         industry="Beauty",

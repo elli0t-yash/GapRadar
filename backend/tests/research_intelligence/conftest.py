@@ -13,11 +13,12 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
-from app.db.models import Signal
+from app.db.models import Investigation, Signal
 from tests.api.conftest import (  # noqa: F401 - re-exported API fixtures
     api_client,
     brightdata_settings,
     enrichment_scheduler,
+    investigation_scheduler,
     make_api_client,
     scheduler,
 )
@@ -108,3 +109,25 @@ def opportunity_signal(db_session: Session) -> Signal:
 @pytest.fixture
 def second_opportunity_signal(db_session: Session) -> Signal:
     return make_opportunity_signal(db_session, title="Last-mile dispatch is opaque")
+
+
+# The investigation fixture lives here too, so the coexistence tests can
+# research a Signal and an Investigation side by side over the same
+# committed records without either package importing the other's conftest
+# in a cycle.
+INVESTIGATION_QUERY = (
+    "Booking cargo vehicles is harder than passenger transport and drivers "
+    "quote inflated prices"
+)
+
+
+@pytest.fixture
+def investigation(db_session: Session) -> Investigation:
+    """One user-supplied hypothesis the deterministic generator can plan for."""
+    from app.investigations.schemas import InvestigationCreate
+    from app.investigations.service import create_investigation
+
+    return create_investigation(
+        db_session,
+        payload=InvestigationCreate(query=INVESTIGATION_QUERY, industry="Logistics"),
+    )

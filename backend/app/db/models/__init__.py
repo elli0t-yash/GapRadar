@@ -1,5 +1,8 @@
 from app.db.models.collector import Collector
 from app.db.models.collector_run import CollectorRun
+from app.db.models.investigation import Investigation
+from app.db.models.investigation_research_match import InvestigationResearchMatch
+from app.db.models.investigation_run import InvestigationRun
 from app.db.models.opportunity_research_match import OpportunityResearchMatch
 from app.db.models.pipeline_run import PipelineRun
 from app.db.models.reliability_incident import ReliabilityIncident
@@ -12,6 +15,8 @@ from app.domain.enums import (
     CollectorStatus,
     FailureClassification,
     IncidentStatus,
+    InvestigationRunStatus,
+    InvestigationStatus,
     PipelineRunStatus,
     RecommendedAction,
     ResearchEnrichmentStatus,
@@ -27,6 +32,11 @@ __all__ = [
     "CollectorStatus",
     "FailureClassification",
     "IncidentStatus",
+    "Investigation",
+    "InvestigationResearchMatch",
+    "InvestigationRun",
+    "InvestigationRunStatus",
+    "InvestigationStatus",
     "OpportunityResearchMatch",
     "PipelineRun",
     "PipelineRunStatus",

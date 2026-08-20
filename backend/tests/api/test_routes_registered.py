@@ -12,6 +12,15 @@ is deliberately no endpoint that mutates an execution or an incident.
 Research intelligence is read-only for the same reason: enrichment
 acquires from a provider and judges relevance, so it is never reachable
 through a GET.
+
+Investigations are the one place a user writes free text. POST
+/investigations creates a record and starts NOTHING -- 201, no provider
+call, no scheduler -- which is why it is allowed to exist on a surface
+that otherwise refuses CRUD. There is deliberately no update or delete.
+
+POST /investigations/{id}/run is the one endpoint here that costs money,
+and it is a 202 claim rather than the work, exactly like the pipeline and
+enrichment claims above it. Its GET twin and /research are pure reads.
 """
 
 from fastapi import FastAPI
@@ -28,6 +37,12 @@ EXPECTED_PATHS = {
     ("GET", "/api/v1/opportunities/{signal_id}/research"),
     ("POST", "/api/v1/opportunities/{signal_id}/research/enrich"),
     ("GET", "/api/v1/opportunities/{signal_id}/research/enrichment"),
+    ("POST", "/api/v1/investigations"),
+    ("GET", "/api/v1/investigations"),
+    ("GET", "/api/v1/investigations/{investigation_id}"),
+    ("POST", "/api/v1/investigations/{investigation_id}/run"),
+    ("GET", "/api/v1/investigations/{investigation_id}/run"),
+    ("GET", "/api/v1/investigations/{investigation_id}/research"),
     ("GET", "/api/v1/reliability"),
     ("GET", "/api/v1/reliability/live-evidence"),
     ("GET", "/api/v1/reliability/demo"),

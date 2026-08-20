@@ -86,3 +86,29 @@ def get_research_enrichment_scheduler() -> ResearchEnrichmentScheduler:
 EnrichmentScheduler = Annotated[
     ResearchEnrichmentScheduler, Depends(get_research_enrichment_scheduler)
 ]
+
+
+# Callable that takes a claimed investigation run id and arranges for it
+# to run out of band. Returns immediately; it never does the work.
+InvestigationRunScheduler = Callable[[uuid.UUID], None]
+
+
+def get_investigation_run_scheduler() -> InvestigationRunScheduler:
+    """How the API hands a claimed investigation run to the local executor.
+
+    A dependency rather than a direct import for the same reason as the
+    other two schedulers: a test substitutes a recorder and proves the
+    route returned WITHOUT spending a Bright Data job or an LLM call,
+    which is the property the 202 exists to establish.
+
+    Imported inside the function so the provider adapters are never
+    pulled in while this module is still loading.
+    """
+    from app.investigations.background import execute_investigation_run
+
+    return execute_investigation_run
+
+
+InvestigationScheduler = Annotated[
+    InvestigationRunScheduler, Depends(get_investigation_run_scheduler)
+]

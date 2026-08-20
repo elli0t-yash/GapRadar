@@ -4,20 +4,26 @@ No test here reaches Bright Data: records arrive as plain lists, which is
 exactly how a future BrightDataArxivClient will hand them over.
 """
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Any
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    Investigation,
     ResearchPaper,
     ResearchSearchResult,
     ResearchSearchRun,
     Signal,
 )
 from app.domain.enums import ResearchSource
-from app.research_intelligence.schemas import ResearchRejectionReason
+from app.research_intelligence.schemas import (
+    ResearchIngestionResult,
+    ResearchRejectionReason,
+)
 from app.research_intelligence.service import (
     get_paper_by_arxiv_id,
     ingest_arxiv_search_results,
@@ -48,14 +54,34 @@ def as_utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
+# Every research search names EXACTLY ONE subject -- ResearchSearchRun's
+# CHECK enforces it, and `ingest_arxiv_search_results` refuses a call that
+# names none. Most tests here are about paper normalization, dedupe and
+# transaction boundaries rather than about provenance, so they bind one
+# subject once through this fixture instead of repeating it. The tests
+# that ARE about provenance call the real function directly.
+Ingest = Callable[..., ResearchIngestionResult]
+
+
+@pytest.fixture
+def ingest(db_session: Session, opportunity_signal: Signal) -> Ingest:
+    def _ingest(session: Session, **kwargs: Any) -> ResearchIngestionResult:
+        return ingest_arxiv_search_results(
+            session, signal_id=opportunity_signal.id, **kwargs
+        )
+
+    return _ingest
+
+
 # -- valid ingestion --------------------------------------------------------
 
 
 def test_a_validated_batch_is_ingested_whole(
-    db_session: Session, records: list[dict[str, Any]]
+    db_session: Session, records: list[dict[str, Any]],
+    ingest: Ingest,
 ) -> None:
     """The 15 real records, end to end, with no provider involved."""
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session, query=VALIDATED_QUERY, records=records, searched_at=SEARCHED_AT
     )
 
@@ -70,8 +96,8 @@ def test_a_validated_batch_is_ingested_whole(
     assert count(db_session, ResearchSearchResult) == expected
 
 
-def test_a_persisted_paper_keeps_every_normalized_field(db_session: Session) -> None:
-    ingest_arxiv_search_results(
+def test_a_persisted_paper_keeps_every_normalized_field(db_session: Session, ingest: Ingest) -> None:
+    ingest(
         db_session, query=VALIDATED_QUERY, records=[arxiv_record()]
     )
 
@@ -88,9 +114,10 @@ def test_a_persisted_paper_keeps_every_normalized_field(db_session: Session) -> 
 
 
 def test_result_order_is_preserved_as_the_search_ranking(
-    db_session: Session, records: list[dict[str, Any]]
+    db_session: Session, records: list[dict[str, Any]],
+    ingest: Ingest,
 ) -> None:
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session, query=VALIDATED_QUERY, records=records
     )
 
@@ -109,13 +136,14 @@ def test_result_order_is_preserved_as_the_search_ranking(
 
 
 def test_re_ingesting_the_same_batch_creates_no_new_papers(
-    db_session: Session, records: list[dict[str, Any]]
+    db_session: Session, records: list[dict[str, Any]],
+    ingest: Ingest,
 ) -> None:
     """Finding a paper again is not a new paper."""
-    first = ingest_arxiv_search_results(
+    first = ingest(
         db_session, query=VALIDATED_QUERY, records=records
     )
-    second = ingest_arxiv_search_results(
+    second = ingest(
         db_session, query=VALIDATED_QUERY, records=records
     )
 
@@ -132,11 +160,11 @@ def test_re_ingesting_the_same_batch_creates_no_new_papers(
     assert count(db_session, ResearchSearchResult) == expected * 2
 
 
-def test_a_revised_paper_updates_the_existing_row(db_session: Session) -> None:
-    ingest_arxiv_search_results(
+def test_a_revised_paper_updates_the_existing_row(db_session: Session, ingest: Ingest) -> None:
+    ingest(
         db_session, query=VALIDATED_QUERY, records=[arxiv_record()]
     )
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session,
         query=VALIDATED_QUERY,
         records=[arxiv_record(title="AoI-Guaranteed Dynamic Route Planning, Revised")],
@@ -150,12 +178,12 @@ def test_a_revised_paper_updates_the_existing_row(db_session: Session) -> None:
     assert paper.title.endswith("Revised")
 
 
-def test_a_new_version_of_a_paper_is_the_same_paper(db_session: Session) -> None:
+def test_a_new_version_of_a_paper_is_the_same_paper(db_session: Session, ingest: Ingest) -> None:
     """v1 and v2 are revisions, not two papers."""
-    ingest_arxiv_search_results(
+    ingest(
         db_session, query=VALIDATED_QUERY, records=[arxiv_record()]
     )
-    ingest_arxiv_search_results(
+    ingest(
         db_session,
         query=VALIDATED_QUERY,
         records=[
@@ -172,8 +200,9 @@ def test_a_new_version_of_a_paper_is_the_same_paper(db_session: Session) -> None
 
 def test_the_same_paper_twice_in_one_batch_is_counted_not_duplicated(
     db_session: Session,
+    ingest: Ingest,
 ) -> None:
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session,
         query=VALIDATED_QUERY,
         records=[arxiv_record(), arxiv_record(), arxiv_record_for("2607.22582")],
@@ -211,16 +240,68 @@ def test_a_search_records_who_asked_what_and_when(
     assert [r.research_paper_id for r in run.results] == result.research_paper_ids
 
 
-def test_a_search_without_an_originating_opportunity_is_still_recorded(
-    db_session: Session,
+def test_a_search_naming_no_subject_is_refused(
+    db_session: Session, records: list[dict[str, Any]]
 ) -> None:
-    """An operator probe or backfill is orphaned, not refused."""
+    """An unattributed search is not recorded as an orphan. It is refused.
+
+    This reverses an earlier decision, deliberately. A row naming no
+    subject cannot be read back through any read model and cannot be
+    explained by any operator -- it is a provider call that happened and
+    that nothing accounts for. Recording it "honestly" made the
+    provenance table look complete while quietly accumulating rows no
+    surface could ever show.
+    """
+    with pytest.raises(ValueError, match="exactly one subject"):
+        ingest_arxiv_search_results(
+            db_session, query="exploratory", records=records
+        )
+
+
+def test_a_search_naming_two_subjects_is_refused(
+    db_session: Session,
+    records: list[dict[str, Any]],
+    opportunity_signal: Signal,
+    investigation: Investigation,
+) -> None:
+    """A row naming both makes "which problem was this for" unanswerable."""
+    with pytest.raises(ValueError, match="exactly one subject"):
+        ingest_arxiv_search_results(
+            db_session,
+            query="ambiguous",
+            records=records,
+            signal_id=opportunity_signal.id,
+            investigation_id=investigation.id,
+        )
+
+
+def test_a_refused_search_writes_nothing(
+    db_session: Session, records: list[dict[str, Any]]
+) -> None:
+    """The guard runs before the INSERT, so nothing half-lands."""
+    with pytest.raises(ValueError):
+        ingest_arxiv_search_results(db_session, query="orphan", records=records)
+
+    assert count(db_session, ResearchSearchRun) == 0
+    assert count(db_session, ResearchPaper) == 0
+
+
+def test_a_search_can_be_attributed_to_an_investigation(
+    db_session: Session,
+    records: list[dict[str, Any]],
+    investigation: Investigation,
+) -> None:
+    """The second kind of subject, through the same entry point."""
     result = ingest_arxiv_search_results(
-        db_session, query="exploratory", records=[arxiv_record()]
+        db_session,
+        query="cargo vehicle booking",
+        records=records,
+        investigation_id=investigation.id,
     )
 
     run = db_session.get(ResearchSearchRun, result.search_run_id)
     assert run is not None
+    assert run.investigation_id == investigation.id
     assert run.signal_id is None
 
 
@@ -256,9 +337,10 @@ def test_one_paper_found_by_two_queries_is_one_paper_and_two_searches(
 
 def test_the_query_comes_from_the_caller_not_from_the_record(
     db_session: Session,
+    ingest: Ingest,
 ) -> None:
     """The collector pins its own `query`; trusting it would mislabel searches."""
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session,
         query="what was actually asked",
         records=[arxiv_record(query="what the collector had hardcoded")],
@@ -274,8 +356,9 @@ def test_the_query_comes_from_the_caller_not_from_the_record(
 
 def test_a_bad_record_is_reported_and_the_rest_still_land(
     db_session: Session,
+    ingest: Ingest,
 ) -> None:
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session,
         query=VALIDATED_QUERY,
         records=[
@@ -298,9 +381,10 @@ def test_a_bad_record_is_reported_and_the_rest_still_land(
 
 def test_an_all_bad_batch_still_records_that_the_search_happened(
     db_session: Session,
+    ingest: Ingest,
 ) -> None:
     """A search that returned nothing usable is evidence, not a non-event."""
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session, query=VALIDATED_QUERY, records=[arxiv_record(arxiv_id="junk")]
     )
 
@@ -312,8 +396,9 @@ def test_an_all_bad_batch_still_records_that_the_search_happened(
 
 def test_an_empty_batch_is_a_recorded_search_with_no_results(
     db_session: Session,
+    ingest: Ingest,
 ) -> None:
-    result = ingest_arxiv_search_results(
+    result = ingest(
         db_session, query="a query that found nothing", records=[]
     )
 
@@ -327,9 +412,10 @@ def test_an_empty_batch_is_a_recorded_search_with_no_results(
 
 def test_commit_false_leaves_the_transaction_to_the_caller(
     db_session: Session,
+    ingest: Ingest,
 ) -> None:
     """Matches app.ingestion.service: the caller can extend the unit of work."""
-    ingest_arxiv_search_results(
+    ingest(
         db_session, query=VALIDATED_QUERY, records=[arxiv_record()], commit=False
     )
     assert count(db_session, ResearchPaper) == 1

@@ -29,8 +29,8 @@ from app.research_intelligence.matching import (
 )
 from app.research_intelligence.orchestration import enrich_opportunity_with_research
 from app.research_intelligence.query_generation import ConceptQueryGenerator
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
-from app.research_intelligence.service import market_context_from_signal
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
+from app.research_intelligence.service import research_subject_from_signal
 from tests.research_intelligence.conftest import (
     arxiv_record_for,
     make_opportunity_signal,
@@ -47,13 +47,13 @@ class AlwaysMatcher:
         self.judged: list[str] = []
 
     def judge(
-        self, *, context: MarketContext, plan: ResearchQueryPlan, paper: ResearchPaper
+        self, *, subject: ResearchSubject, plan: ResearchQueryPlan, paper: ResearchPaper
     ) -> ResearchMatchVerdict:
         self.judged.append(paper.arxiv_id)
         return ResearchMatchVerdict(
             relevance_score=self.score,
             matched_concepts=plan.concepts[:2],
-            match_reason=f"Relevant to {context.problem}",
+            match_reason=f"Relevant to {subject.problem}",
             technical_readiness_score=None,
         )
 
@@ -106,8 +106,8 @@ def collector_for(
 
 
 def plan_for(db_session: Session, signal: Signal) -> list[str]:
-    context = market_context_from_signal(signal)
-    return ConceptQueryGenerator().generate(context).queries
+    subject = research_subject_from_signal(signal)
+    return ConceptQueryGenerator().generate(subject).queries
 
 
 def count(session: Session, model: Any) -> int:
@@ -433,7 +433,7 @@ class FlakyMatcher:
         self.seen: list[str] = []
 
     def judge(
-        self, *, context: MarketContext, plan: ResearchQueryPlan, paper: ResearchPaper
+        self, *, subject: ResearchSubject, plan: ResearchQueryPlan, paper: ResearchPaper
     ) -> ResearchMatchVerdict | None:
         self.seen.append(paper.arxiv_id)
         score = self.scores.get(paper.arxiv_id)

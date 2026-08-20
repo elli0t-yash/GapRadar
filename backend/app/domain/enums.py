@@ -281,3 +281,88 @@ class ReliabilityState(str, enum.Enum):
     VALIDATING = "validating"
     VERIFYING = "verifying"
     MANUAL_REVIEW = "manual_review"
+
+
+class InvestigationStatus(str, enum.Enum):
+    """Lifecycle of ONE user-supplied independent investigation, persisted.
+
+    Deliberately small, and deliberately NOT the same enum as
+    ResearchEnrichmentStatus. An enrichment is a job; an investigation is
+    a SUBJECT that a job will later be run against. Sharing one enum
+    would make "the investigation" and "the run over the investigation"
+    indistinguishable the first time an investigation is re-run.
+
+    DRAFT is the only value anything writes today: creating an
+    investigation records the user's wording and does no work, so no
+    other state can be reached honestly yet. The remaining members name
+    the lifecycle the investigation engine will drive, and exist here
+    rather than being added later so the persisted vocabulary does not
+    change underneath rows that are already on disk.
+
+    DRAFT and READY are pre-execution; RUNNING is active; SUCCEEDED and
+    FAILED are terminal.
+
+    SUCCEEDED means the investigation ran to completion -- NOT that it
+    found a viable opportunity. "We looked and there is nothing here" is
+    a successful investigation whose answer is negative.
+    """
+
+    DRAFT = "draft"
+    READY = "ready"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ResearchSubjectOrigin(str, enum.Enum):
+    """Where the thing being researched came from.
+
+    The point of this enum is PROVENANCE, and provenance here is a trust
+    statement, not a label. A SIGNAL was discovered externally and
+    survived collection, source-contract validation and RecallGuard; an
+    INVESTIGATION is a sentence a user typed. Both are legitimate inputs
+    to research, and neither may be presented as the other.
+
+    Carried on ResearchSubject so a downstream consumer can never lose
+    the distinction by accident: without it, a user hypothesis and a
+    validated market signal arrive at the research engine as the same
+    anonymous triple of strings.
+    """
+
+    SIGNAL = "signal"
+    INVESTIGATION = "investigation"
+
+
+class InvestigationRunStatus(str, enum.Enum):
+    """Lifecycle of ONE execution attempt against an investigation.
+
+    Deliberately a different enum from InvestigationStatus, because they
+    answer different questions. The Investigation is the durable subject
+    ("what is being investigated"); a run is one attempt at answering it
+    ("what happened when we tried"). Collapsing them would mean a re-run
+    overwrites the record of the previous attempt, and there would be no
+    history to point at when two runs disagree.
+
+    Deliberately a different enum from ResearchEnrichmentStatus too,
+    despite naming the same four states today. An enrichment is research
+    and only research; an investigation run will grow demand and
+    competitor phases, and its terminal vocabulary will diverge. Sharing
+    the type now would make that divergence a change to the opportunity
+    path as well.
+
+    QUEUED and RUNNING are active; SUCCEEDED and FAILED are terminal.
+
+    There is no INTERRUPTED member. A run whose executor died is FAILED
+    with ResearchOutcomeReason.INTERRUPTED -- the existing taxonomy
+    already carries "why" separately from "what", and a second axis
+    smuggled into the status would put the two in a position to disagree.
+
+    SUCCEEDED means the run completed, NOT that it found anything. An
+    investigation that searched honestly and matched no research is a
+    success whose answer is negative.
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"

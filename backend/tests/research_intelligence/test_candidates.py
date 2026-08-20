@@ -8,26 +8,27 @@ import uuid
 from datetime import date
 
 from app.db.models import ResearchPaper
-from app.domain.enums import ResearchSource
+from app.domain.enums import ResearchSource, ResearchSubjectOrigin
 from app.research_intelligence.candidates import (
     DEFAULT_CANDIDATE_LIMIT,
     context_tokens,
     rank_candidates,
     score_paper,
 )
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
 
 SIGNAL_ID = uuid.uuid4()
 
-CONTEXT = MarketContext(
-    signal_id=SIGNAL_ID,
+CONTEXT = ResearchSubject(
+    subject_id=SIGNAL_ID,
+    origin=ResearchSubjectOrigin.SIGNAL,
     problem="Why is booking cargo vehicles harder than passenger transport?",
     description="Long prose about furniture, apps, cities and people.",
     industry="Logistics",
 )
 
 PLAN = ResearchQueryPlan(
-    signal_id=SIGNAL_ID,
+    subject_id=SIGNAL_ID,
     queries=[
         "on-demand allocation urban freight",
         "urban freight optimization",

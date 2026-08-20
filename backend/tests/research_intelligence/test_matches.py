@@ -22,8 +22,20 @@ from tests.research_intelligence.conftest import (
 
 
 def make_paper(db_session: Session, arxiv_id: str) -> ResearchPaper:
+    """Persist one paper via a real search.
+
+    The search needs a subject of its own: every ResearchSearchRun names
+    exactly one, enforced by a CHECK. It is deliberately NOT one of the
+    signals under test -- these tests count matches per opportunity, and
+    borrowing a subject under test would entangle the fixture with the
+    assertion.
+    """
+    probe = make_opportunity_signal(db_session, title=f"probe for {arxiv_id}")
     result = ingest_arxiv_search_results(
-        db_session, query=VALIDATED_QUERY, records=[arxiv_record_for(arxiv_id)]
+        db_session,
+        query=VALIDATED_QUERY,
+        records=[arxiv_record_for(arxiv_id)],
+        signal_id=probe.id,
     )
     paper = db_session.get(ResearchPaper, result.research_paper_ids[0])
     assert paper is not None

@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import ResearchPaper
 from app.research_intelligence.query_generation import tokenize
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
 
 # How many papers reach the semantic stage.
 #
@@ -59,19 +59,23 @@ class RankedCandidate(BaseModel):
     matched_tokens: list[str] = Field(default_factory=list)
 
 
-def context_tokens(context: MarketContext, plan: ResearchQueryPlan) -> set[str]:
-    """The vocabulary this opportunity is searching with.
+def context_tokens(subject: ResearchSubject, plan: ResearchQueryPlan) -> set[str]:
+    """The vocabulary this subject is searching with.
 
     Drawn from the problem, the industry, the generated concepts and the
     queries themselves -- the description is deliberately excluded. It is
     several hundred words of prose whose incidental vocabulary ("city",
     "apps", "people") matches almost any paper and would flatten the
     ranking toward noise.
+
+    Note for user-supplied investigations, whose description defaults to
+    the query text: excluding the description costs them nothing, because
+    the problem field already carries the same words.
     """
     tokens: set[str] = set()
-    tokens.update(tokenize(context.problem))
-    if context.industry:
-        tokens.update(tokenize(context.industry))
+    tokens.update(tokenize(subject.problem))
+    if subject.industry:
+        tokens.update(tokenize(subject.industry))
     for concept in plan.concepts:
         tokens.update(tokenize(concept))
     for query in plan.queries:
@@ -108,7 +112,7 @@ def score_paper(tokens: set[str], paper: ResearchPaper) -> tuple[float, list[str
 
 
 def rank_candidates(
-    context: MarketContext,
+    subject: ResearchSubject,
     plan: ResearchQueryPlan,
     papers: list[ResearchPaper],
     *,
@@ -126,7 +130,7 @@ def rank_candidates(
     the same score would rank by whatever order the database happened to
     return, and the same input would produce different candidate sets.
     """
-    tokens = context_tokens(context, plan)
+    tokens = context_tokens(subject, plan)
 
     scored: list[RankedCandidate] = []
     for paper in papers:
