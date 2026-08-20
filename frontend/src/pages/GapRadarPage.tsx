@@ -13,6 +13,7 @@ import type { Problem } from "../types";
 import "./GapRadarPage.css";
 
 const FEATURED_COUNT = 6;
+const TOP_PICKS_FILTER = "Top Picks";
 
 function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
@@ -31,12 +32,8 @@ export function GapRadarPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("All");
+  const [category, setCategory] = useState(TOP_PICKS_FILTER);
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
-  // True once the user has touched search or the category chips, including
-  // an explicit click back onto "All" -- that is a deliberate "show
-  // everything" choice, not the same as never having filtered at all.
-  const [hasFiltered, setHasFiltered] = useState(false);
 
   // The one place the Discover feed is loaded. `limit=200` is the backend's
   // maximum and returns the whole corpus, so search and industry filtering
@@ -68,7 +65,10 @@ export function GapRadarPage() {
 
     const q = query.trim().toLowerCase();
     return problems.filter((p) => {
-      const matchesCategory = category === "All" || p.category === category;
+      const matchesCategory =
+        category === "All" ||
+        category === TOP_PICKS_FILTER ||
+        p.category === category;
       const matchesQuery =
         q.length === 0 ||
         p.title.toLowerCase().includes(q) ||
@@ -80,18 +80,15 @@ export function GapRadarPage() {
 
   const handleQueryChange = useCallback((value: string) => {
     setQuery(value);
-    setHasFiltered(true);
   }, []);
 
   const handleCategoryChange = useCallback((value: string) => {
     setCategory(value);
-    setHasFiltered(true);
   }, []);
 
   const resetFilters = useCallback(() => {
     setQuery("");
-    setCategory("All");
-    setHasFiltered(false);
+    setCategory(TOP_PICKS_FILTER);
   }, []);
 
   const retry = useCallback(() => {
@@ -100,18 +97,16 @@ export function GapRadarPage() {
   }, []);
 
   const isLoading = problems === null && loadError === null;
-  const isFiltering = query.trim().length > 0 || category !== "All";
+  const isFiltering = query.trim().length > 0 || category !== TOP_PICKS_FILTER;
+  const isTopPicks = category === TOP_PICKS_FILTER && query.trim().length === 0;
 
-  // Server order. The featured grid shows every match once the user has
-  // touched search or the category chips -- including an explicit click
-  // back onto "All" -- so "Choose from N problems" is never a lie. Only the
-  // untouched, unfiltered landing state is capped to a curated preview.
+  // Server order. "Top Picks" with no search text is the curated landing
+  // state -- capped to a preview -- while "All" or a specific category (or
+  // typing a search) shows every match for that filter.
   const featuredProblems = useMemo(
     () =>
-      hasFiltered
-        ? filteredProblems
-        : filteredProblems.slice(0, FEATURED_COUNT),
-    [filteredProblems, hasFiltered],
+      isTopPicks ? filteredProblems.slice(0, FEATURED_COUNT) : filteredProblems,
+    [filteredProblems, isTopPicks],
   );
 
   return (

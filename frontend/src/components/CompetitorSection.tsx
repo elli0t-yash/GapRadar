@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   CompetitorClassification,
   CompetitorCollection,
@@ -74,6 +75,7 @@ export function CompetitorSection({
   collection: CompetitorCollection;
   partial: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const visibleCount = GROUPS.reduce(
     (total, group) =>
       total +
@@ -85,57 +87,80 @@ export function CompetitorSection({
 
   return (
     <section className="investigation-result-section evidence-section" aria-labelledby="competitor-candidates-title">
-      <header className="investigation-result-heading">
+      <button
+        type="button"
+        className="investigation-result-heading investigation-result-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
         <div>
           <p className="investigation-result-eyebrow">Product discovery</p>
           <h2 id="competitor-candidates-title">Competitor candidates</h2>
         </div>
-      </header>
+        <svg
+          className={`investigation-result-chevron${open ? " is-open" : ""}`}
+          viewBox="0 0 20 20"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M5 7l5 6 5-6"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
 
-      {partial ? (
-        <p className="investigation-result-warning">
-          Competitor discovery was partial. These candidates are the persisted
-          results from the searches that succeeded.
-        </p>
+      {open ? (
+        <>
+          {partial ? (
+            <p className="investigation-result-warning">
+              Competitor discovery was partial. These candidates are the persisted
+              results from the searches that succeeded.
+            </p>
+          ) : null}
+
+          {visibleCount === 0 ? (
+            <div className="investigation-result-empty">
+              <h3>No competitor candidates were accepted from this discovery pass.</h3>
+              <p>
+                This is a valid zero result, not a complete competitive-landscape
+                claim.
+              </p>
+            </div>
+          ) : null}
+
+          {GROUPS.map((group) => {
+            const competitors = collection.competitors.filter(
+              (competitor) => competitor.classification === group.classification,
+            );
+            if (competitors.length === 0) return null;
+
+            return (
+              <section
+                key={group.classification}
+                className={`evidence-group is-${group.classification}`}
+                aria-labelledby={`competitor-${group.classification}-title`}
+              >
+                <header>
+                  <div>
+                    <h3 id={`competitor-${group.classification}-title`}>{group.label}</h3>
+                    <p>{group.description}</p>
+                  </div>
+                  <span>{competitors.length}</span>
+                </header>
+                <ul className="evidence-card-list">
+                  {competitors.map((competitor) => (
+                    <CompetitorCard key={competitor.id} competitor={competitor} />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </>
       ) : null}
-
-      {visibleCount === 0 ? (
-        <div className="investigation-result-empty">
-          <h3>No competitor candidates were accepted from this discovery pass.</h3>
-          <p>
-            This is a valid zero result, not a complete competitive-landscape
-            claim.
-          </p>
-        </div>
-      ) : null}
-
-      {GROUPS.map((group) => {
-        const competitors = collection.competitors.filter(
-          (competitor) => competitor.classification === group.classification,
-        );
-        if (competitors.length === 0) return null;
-
-        return (
-          <section
-            key={group.classification}
-            className={`evidence-group is-${group.classification}`}
-            aria-labelledby={`competitor-${group.classification}-title`}
-          >
-            <header>
-              <div>
-                <h3 id={`competitor-${group.classification}-title`}>{group.label}</h3>
-                <p>{group.description}</p>
-              </div>
-              <span>{competitors.length}</span>
-            </header>
-            <ul className="evidence-card-list">
-              {competitors.map((competitor) => (
-                <CompetitorCard key={competitor.id} competitor={competitor} />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
     </section>
   );
 }
