@@ -22,12 +22,24 @@ from app.api.v1.deps import DbSession, InvestigationScheduler
 from app.db.models import Investigation
 from app.domain.enums import ResearchSubjectOrigin
 from app.exceptions import AppError
+from app.investigations.evidence import (
+    DEFAULT_LIMIT as EVIDENCE_DEFAULT_LIMIT,
+)
+from app.investigations.evidence import (
+    MAX_LIMIT as EVIDENCE_MAX_LIMIT,
+)
+from app.investigations.evidence import (
+    get_competitors,
+    get_demand_evidence,
+)
 from app.investigations.runs import (
     latest_run,
     reconcile_stale_investigation_runs,
     start_run,
 )
 from app.investigations.schemas import (
+    CompetitorCollection,
+    DemandEvidenceCollection,
     InvestigationCreate,
     InvestigationRead,
     InvestigationRunAccepted,
@@ -209,3 +221,59 @@ def get_investigation_research(
         subject_id=investigation_id,
         origin=ResearchSubjectOrigin.INVESTIGATION,
     )
+
+
+@router.get("/{investigation_id}/evidence", response_model=DemandEvidenceCollection)
+def get_investigation_evidence(
+    investigation_id: uuid.UUID,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=EVIDENCE_MAX_LIMIT)] = EVIDENCE_DEFAULT_LIMIT,
+) -> DemandEvidenceCollection:
+    """Web pages judged as evidence that this problem is really experienced.
+
+    READ ONLY, AND STRICTLY SO. Persisted rows and nothing else: no SERP
+    request, no classification, and above all NO FETCHING OF THE PAGES
+    LISTED. Discovery stores titles and snippets; opening those URLs is a
+    separate later stage, and doing it on a read would turn a page load
+    into fifty outbound requests.
+
+    A separate endpoint from /competitors and /research on purpose. One
+    combined investigation payload would make a caller that wants demand
+    pay for everything else, and would grow without bound as phases are
+    added.
+
+    An investigation that has never run returns an empty-but-valid
+    collection, which is a different fact from a run that searched and
+    found nothing -- and the run endpoint is where that difference is
+    readable.
+    """
+    if get_investigation(session, investigation_id=investigation_id) is None:
+        raise AppError(
+            f"investigation {investigation_id} not found", status_code=404
+        )
+
+    return get_demand_evidence(
+        session, investigation_id=investigation_id, limit=limit
+    )
+
+
+@router.get("/{investigation_id}/competitors", response_model=CompetitorCollection)
+def get_investigation_competitors(
+    investigation_id: uuid.UUID,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=EVIDENCE_MAX_LIMIT)] = EVIDENCE_DEFAULT_LIMIT,
+) -> CompetitorCollection:
+    """Products discovered that address, or neighbour, this idea.
+
+    Same discipline as /evidence: persisted rows only, no provider call,
+    and no navigation into any competitor's site. There is no pricing and
+    no feature list here because discovery never opened the page, and
+    `name` is the page title rather than a company name this system
+    invented.
+    """
+    if get_investigation(session, investigation_id=investigation_id) is None:
+        raise AppError(
+            f"investigation {investigation_id} not found", status_code=404
+        )
+
+    return get_competitors(session, investigation_id=investigation_id, limit=limit)

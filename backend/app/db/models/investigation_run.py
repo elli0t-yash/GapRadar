@@ -52,10 +52,11 @@ class InvestigationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     table would need a nullable-pair or a polymorphic id that no database
     can enforce.
 
-    Phase 2 scope: this run does research and only research. There is no
-    demand, competitor or whitespace phase, and no column pretending
-    there is -- `counters` carries the four research funnel counts and
-    nothing else.
+    Phase 3 scope: planning, academic research, demand discovery and
+    competitor discovery. There is deliberately no whitespace phase and
+    no verdict, and no column pretending otherwise -- a phase reporting
+    0/0 for work nobody wrote is indistinguishable from a phase that ran
+    and found nothing.
     """
 
     __tablename__ = "investigation_runs"
@@ -130,6 +131,20 @@ class InvestigationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Persisted because three of the four are unrecoverable afterwards --
     # rejected verdicts are not stored.
     counters: Mapped[dict[str, int]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
+    # PHASE-BY-PHASE PROGRESS, typed by
+    # app.investigations.progress.InvestigationRunPhases.
+    #
+    # A run now has four phases whose numbers mean different things, and
+    # "18 judged" is meaningless without knowing whether it counts papers
+    # or web pages. `counters` above stays because it is the research
+    # funnel and a shipped client contract pins it -- both are written by
+    # the same helper from the same source, so they cannot disagree.
+    phases: Mapped[dict[str, object]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),
         nullable=False,
         default=dict,

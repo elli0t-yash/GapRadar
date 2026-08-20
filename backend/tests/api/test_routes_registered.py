@@ -20,7 +20,13 @@ that otherwise refuses CRUD. There is deliberately no update or delete.
 
 POST /investigations/{id}/run is the one endpoint here that costs money,
 and it is a 202 claim rather than the work, exactly like the pipeline and
-enrichment claims above it. Its GET twin and /research are pure reads.
+enrichment claims above it. Its GET twin, /research, /evidence and
+/competitors are pure reads -- and none of them opens a discovered URL.
+
+Web evidence and competitors are separate endpoints rather than fields on
+one investigation payload: a caller that wants competitors should not pay
+for demand evidence, and one combined response would grow without bound
+as phases are added.
 """
 
 from fastapi import FastAPI
@@ -43,6 +49,8 @@ EXPECTED_PATHS = {
     ("POST", "/api/v1/investigations/{investigation_id}/run"),
     ("GET", "/api/v1/investigations/{investigation_id}/run"),
     ("GET", "/api/v1/investigations/{investigation_id}/research"),
+    ("GET", "/api/v1/investigations/{investigation_id}/evidence"),
+    ("GET", "/api/v1/investigations/{investigation_id}/competitors"),
     ("GET", "/api/v1/reliability"),
     ("GET", "/api/v1/reliability/live-evidence"),
     ("GET", "/api/v1/reliability/demo"),

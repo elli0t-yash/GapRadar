@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     BRIGHTDATA_API_KEY: str = ""
     BRIGHTDATA_BASE_URL: str = "https://api.brightdata.com"
+    # The Bright Data SERP API zone used for investigation web discovery.
+    # A PRODUCT CONFIGURATION, not a second credential: the token above is
+    # reused. Empty means web discovery is unavailable, which the
+    # investigation run reports honestly rather than failing to start.
+    BRIGHTDATA_SERP_ZONE: str = ""
     HARNESS_API_KEY: str = ""
 
     # Semantic research matching. Empty key means the semantic matcher is

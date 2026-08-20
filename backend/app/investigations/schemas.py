@@ -10,7 +10,7 @@ Pure pydantic. No ORM import, no provider import.
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import (
     AliasChoices,
@@ -22,11 +22,14 @@ from pydantic import (
 )
 
 from app.domain.enums import (
+    CompetitorClassification,
+    DemandEvidenceClassification,
     InvestigationRunStatus,
     InvestigationStatus,
     ResearchOutcomeReason,
     ResearchQueryStatus,
 )
+from app.investigations.progress import InvestigationRunPhases
 from app.research_intelligence.schemas import (
     ResearchEnrichmentCounters,
     ResearchQueryStateRead,
@@ -158,9 +161,18 @@ class InvestigationRunRead(BaseModel):
     # WHY this run ended as it did. None for an ordinary success with
     # matches.
     outcome_reason: ResearchOutcomeReason | None = None
+    # The RESEARCH funnel, kept because a shipped client contract pins
+    # it. Identical to `phases.research`'s four numbers -- both are
+    # written from one snapshot by the same helper, so they cannot
+    # disagree.
     counters: ResearchEnrichmentCounters = Field(
         default_factory=ResearchEnrichmentCounters
     )
+    # PHASE-BY-PHASE PROGRESS. Every number measured, and none of them
+    # added together across phases: "18 judged" means nothing without
+    # knowing whether it counts papers or web pages. There is no
+    # whitespace phase and no verdict, because neither exists.
+    phases: InvestigationRunPhases = Field(default_factory=InvestigationRunPhases)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -233,3 +245,100 @@ class InvestigationRunAccepted(BaseModel):
     # starting one. Still a 202 -- the caller asked for an investigation
     # and one is happening -- but no second provider run was triggered.
     already_running: bool = False
+
+
+# -- web evidence read models ----------------------------------------------
+# Separate endpoints, separate models. One giant investigation payload
+# would make a page that only wants competitors pay for demand evidence,
+# and would grow without bound as phases are added.
+
+
+class WebEvidenceProvenance(BaseModel):
+    """How GapRadar came to be looking at one page.
+
+    `found_by_queries` is why hits are kept per search rather than
+    collapsed into the evidence row. How many independent search
+    directions converged on a page is one of the few honest strength
+    signals discovery produces -- and it is reported as the list of
+    queries, not as a score, because turning it into one would be the
+    fabrication this phase is avoiding.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    found_by_queries: list[str] = Field(default_factory=list)
+    # Best (lowest) rank this page reached in any search that found it.
+    # None when no search reported a position.
+    best_position: int | None = None
+
+
+class DemandEvidenceRead(BaseModel):
+    """One judged page, as evidence about whether the problem is real."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    url: str
+    domain: str
+    title: str
+    snippet: str
+    published_at: date | None = None
+    classification: DemandEvidenceClassification
+    relevance_score: float
+    reason: str
+    provenance: WebEvidenceProvenance = Field(
+        default_factory=WebEvidenceProvenance
+    )
+
+
+class DemandEvidenceCollection(BaseModel):
+    """Everything GapRadar has judged about demand for one investigation.
+
+    DELIBERATELY CARRIES NO DEMAND SCORE. Aggregating classifications
+    into a number would require weighing source quality, independence,
+    recency and volume, none of which discovery measures. The counts are
+    the finding; a score is a later phase that has to earn it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    investigation_id: uuid.UUID
+    # Counts by classification value, including the ones that do not
+    # support the idea. A CONTRADICTS finding is the most valuable thing
+    # here and is never hidden.
+    counts: dict[str, int] = Field(default_factory=dict)
+    evidence: list[DemandEvidenceRead] = Field(default_factory=list)
+
+
+class CompetitorRead(BaseModel):
+    """One judged page, as a competitor to the investigated idea."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    url: str
+    domain: str
+    # A DISPLAY IDENTITY, not a verified company name: discovery does not
+    # open the page, so the page title is what it can honestly report.
+    name: str
+    snippet: str
+    classification: CompetitorClassification
+    relevance_score: float
+    reason: str
+    provenance: WebEvidenceProvenance = Field(
+        default_factory=WebEvidenceProvenance
+    )
+
+
+class CompetitorCollection(BaseModel):
+    """Everything GapRadar has judged about competition for one investigation.
+
+    No competition score, and no pricing or feature data: discovery reads
+    search results, not products.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    investigation_id: uuid.UUID
+    counts: dict[str, int] = Field(default_factory=dict)
+    competitors: list[CompetitorRead] = Field(default_factory=list)
