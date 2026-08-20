@@ -1,0 +1,2 @@
+"""GapRadar CLI tests."""
+
