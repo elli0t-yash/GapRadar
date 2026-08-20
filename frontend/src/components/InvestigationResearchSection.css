@@ -17,6 +17,7 @@
 
 .investigation-result-heading h2 {
   font-size: var(--fs-xl);
+  scroll-margin-top: 160px;
 }
 
 .investigation-result-eyebrow {
@@ -118,21 +119,22 @@
 }
 
 .investigation-paper-heading > div {
+  flex: 1;
   min-width: 0;
 }
 
 .investigation-score {
   display: grid;
   flex: 0 0 auto;
-  min-width: 42px;
-  height: 42px;
+  min-width: 0;
+  height: auto;
   place-items: center;
-  padding: 0 8px;
+  padding: 4px 8px;
   border: 1px solid var(--accent-border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: var(--accent-bg);
   color: var(--accent-text);
-  font-size: var(--fs-md);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -161,6 +163,15 @@
   font-size: var(--fs-sm);
   line-height: 1.55;
 }
+
+.investigation-paper-reason strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent-text);
+  font-size: var(--fs-xs);
+}
+
+.investigation-paper-reason p { margin: 0; }
 
 .investigation-paper-meta {
   display: flex;

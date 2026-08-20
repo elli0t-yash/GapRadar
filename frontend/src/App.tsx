@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { GapRadarPage } from "./pages/GapRadarPage";
 import { ComingSoonPage } from "./pages/ComingSoonPage";
 import { ReliabilityPage } from "./pages/ReliabilityPage";
@@ -8,15 +8,33 @@ import { InvestigationDetailPage } from "./pages/InvestigationDetailPage";
 import { ScrapingIntro } from "./components/ScrapingIntro";
 
 function App() {
-  const [introDone, setIntroDone] = useState(false);
+  const location = useLocation();
+  const [showIntro, setShowIntro] = useState(() => {
+    if (location.pathname !== "/") return false;
+    if (window.matchMedia?.("(max-width: 640px)").matches) return false;
+    try {
+      return sessionStorage.getItem("gapradar-intro-seen") !== "true";
+    } catch {
+      return true;
+    }
+  });
+
+  function finishIntro() {
+    try {
+      sessionStorage.setItem("gapradar-intro-seen", "true");
+    } catch {
+      /* The visual intro does not require storage to work. */
+    }
+    setShowIntro(false);
+  }
 
   return (
     <>
-      <ScrapingIntro onDone={() => setIntroDone(true)} />
+      {showIntro ? <ScrapingIntro onDone={finishIntro} /> : null}
       <Routes>
         <Route
           path="/"
-          element={<GapRadarPage introDone={introDone} />}
+          element={<GapRadarPage />}
         />
         <Route
           path="/trends"

@@ -17,6 +17,70 @@
     transform 0.25s cubic-bezier(0.2, 0.85, 0.25, 1);
 }
 
+.problem-card.is-featured {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3) var(--space-5);
+  min-height: 310px;
+  padding: var(--space-5);
+  border-color: var(--accent-border);
+  background:
+    radial-gradient(circle at 95% 10%, var(--accent-bg), transparent 34%),
+    var(--bg-raised);
+  box-shadow: var(--shadow-feature);
+}
+
+.problem-card-rank {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.problem-card-rank span {
+  color: var(--accent-text);
+  font-size: var(--fs-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+.problem-card.is-featured .problem-card-rank,
+.problem-card.is-featured .problem-card-title,
+.problem-card.is-featured .problem-card-description,
+.problem-card.is-featured .problem-card-meta,
+.problem-card.is-featured .problem-card-cta {
+  grid-column: 1;
+}
+
+.problem-card.is-featured .problem-card-top {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  align-self: stretch;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 150px;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border);
+}
+
+.problem-card.is-featured .problem-card-title {
+  max-width: 780px;
+  font-size: clamp(25px, 3vw, 38px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+.problem-card.is-featured .problem-card-description {
+  max-width: 72ch;
+  -webkit-line-clamp: 3;
+  color: var(--text);
+  font-size: var(--fs-base);
+}
+
 .problem-card::before {
   content: "";
   position: absolute;
@@ -79,11 +143,17 @@
     color 0.25s ease;
 }
 
-.problem-card-signal svg {
-  width: 12px;
-  height: 12px;
-  color: var(--accent);
-  transition: color 0.25s ease;
+.problem-card-signal small {
+  display: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.problem-card-signal strong {
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
 }
 
 .problem-card-signal.is-hot {
@@ -91,8 +161,18 @@
   background: linear-gradient(135deg, var(--accent-2), var(--accent));
 }
 
-.problem-card-signal.is-hot svg {
-  color: var(--on-accent);
+.problem-card.is-featured .problem-card-signal {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-md);
+}
+
+.problem-card.is-featured .problem-card-signal small { display: block; }
+.problem-card.is-featured .problem-card-signal strong {
+  font-size: 42px;
+  line-height: 1;
 }
 
 .problem-card-title {
@@ -124,9 +204,28 @@
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: var(--fs-xs);
   color: var(--text-muted);
+}
+
+.problem-card-trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok-text);
+  font-weight: 700;
+}
+
+.problem-card-trust > span {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ok-bg);
+  font-size: 10px;
 }
 
 .problem-card-source {
@@ -148,6 +247,52 @@
 .problem-card:hover .problem-card-arrow {
   opacity: 1;
   transform: translateX(0);
+}
+
+.problem-card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+  color: var(--accent-text);
+  font-size: var(--fs-sm);
+  font-weight: 800;
+}
+
+.problem-card:not(.is-featured) .problem-card-cta {
+  margin-top: var(--space-1);
+  font-size: var(--fs-xs);
+}
+
+@media (max-width: 700px) {
+  .problem-card.is-featured {
+    display: flex;
+    min-height: 0;
+    padding: var(--space-4);
+  }
+
+  .problem-card.is-featured .problem-card-top {
+    align-self: auto;
+    flex-direction: row;
+    min-width: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .problem-card.is-featured .problem-card-signal {
+    display: inline-flex;
+    width: auto;
+    padding: 5px 9px;
+  }
+
+  .problem-card.is-featured .problem-card-signal small { display: none; }
+  .problem-card.is-featured .problem-card-signal strong { font-size: var(--fs-xs); }
+  .problem-card.is-featured .problem-card-title { font-size: var(--fs-lg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .problem-card { transition: none; }
+  .problem-card:hover { transform: none; }
 }
 
 /* "Not scorable" is a real backend answer, not a zero. Rendered in the muted

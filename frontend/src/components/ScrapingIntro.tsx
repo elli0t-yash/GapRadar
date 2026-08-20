@@ -9,21 +9,21 @@ import "./ScrapingIntro.css";
 // ---------------------------------------------------------------------------
 // Tunable timings (ms unless noted). Change these to re-pace the sequence.
 // ---------------------------------------------------------------------------
-const POP_STAGGER_MS = 30; // delay between each card's pop-in start
-const POP_DURATION_MS = 420; // duration of a single card's pop-in
-const BEAM_START_DELAY_MS = 200; // pause after last card pops before the beam sweeps
-const BEAM_DURATION_MS = 1600; // scanning beam sweep duration
-const SCORE_REVEAL_DELAY_MS = 250; // pause after beam finishes before badges fade in
-const SCORE_REVEAL_DURATION_MS = 400; // badge fade-in duration
-const FILTER_DELAY_MS = 900; // pause after scores are shown before rejecting cards
-const REJECT_FADE_DURATION_MS = 500; // rejected card fade/desaturate/shrink duration
-const ARRANGE_DELAY_MS = 150; // pause after rejects are gone before the row animation starts
-const ARRANGE_DURATION_MS = 800; // kept cards flying into the centered row
+const POP_STAGGER_MS = 18; // delay between each card's pop-in start
+const POP_DURATION_MS = 300; // duration of a single card's pop-in
+const BEAM_START_DELAY_MS = 120; // pause after last card pops before the beam sweeps
+const BEAM_DURATION_MS = 900; // scanning beam sweep duration
+const SCORE_REVEAL_DELAY_MS = 120; // pause after beam finishes before badges fade in
+const SCORE_REVEAL_DURATION_MS = 250; // badge fade-in duration
+const FILTER_DELAY_MS = 350; // pause after scores are shown before rejecting cards
+const REJECT_FADE_DURATION_MS = 300; // rejected card fade/desaturate/shrink duration
+const ARRANGE_DELAY_MS = 100; // pause after rejects are gone before the row animation starts
+const ARRANGE_DURATION_MS = 500; // kept cards flying into the centered row
 const ARRANGE_EASING = "cubic-bezier(.2,.85,.25,1)";
 const ARRANGE_SETTLE_SCALE = 1.05; // slight overshoot scale for kept cards in the row
-const LABEL_DELAY_MS = 250; // pause after cards settle before the label fades in
-const FADE_OUT_DELAY_MS = 1200; // pause after the label before the overlay fades out
-const OVERLAY_FADE_DURATION_MS = 600; // overlay fade-to-page duration
+const LABEL_DELAY_MS = 150; // pause after cards settle before the label fades in
+const FADE_OUT_DELAY_MS = 650; // pause after the label before the overlay fades out
+const OVERLAY_FADE_DURATION_MS = 350; // overlay fade-to-page duration
 const REDUCED_MOTION_HOLD_MS = 500; // brief static hold when motion is reduced
 
 const KEEP_COUNT = 6;
@@ -66,6 +66,14 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+function prefersCompactIntro(): boolean {
+  return (
+    prefersReducedMotion() ||
+    (typeof window !== "undefined" &&
+      window.matchMedia?.("(max-width: 640px)").matches === true)
+  );
+}
+
 export function ScrapingIntro({ onDone }: { onDone?: () => void }) {
   const [phase, setPhase] = useState<Phase>("grid");
 
@@ -100,7 +108,7 @@ export function ScrapingIntro({ onDone }: { onDone?: () => void }) {
   useEffect(() => {
     if (phase === "done") return;
 
-    if (prefersReducedMotion()) {
+    if (prefersCompactIntro()) {
       setPhase("reduced");
       const t = window.setTimeout(() => setPhase("done"), REDUCED_MOTION_HOLD_MS);
       return () => window.clearTimeout(t);

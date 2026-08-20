@@ -5,13 +5,17 @@ import "./ProblemCard.css";
 export function ProblemCard({
   problem,
   onOpen,
+  rank,
+  featured = false,
 }: {
   problem: Problem;
   onOpen: (problem: Problem) => void;
+  rank?: number;
+  featured?: boolean;
 }) {
   return (
     <article
-      className="problem-card"
+      className={`problem-card${featured ? " is-featured" : ""}`}
       role="button"
       tabIndex={0}
       onClick={() => onOpen(problem)}
@@ -23,6 +27,12 @@ export function ProblemCard({
       }}
       aria-label={`View details for ${problem.title}`}
     >
+      {rank ? (
+        <div className="problem-card-rank" aria-label={`Rank ${rank}`}>
+          <span>{String(rank).padStart(2, "0")}</span>
+          {featured ? <strong>Highest ranked</strong> : null}
+        </div>
+      ) : null}
       <div className="problem-card-top">
         {problem.category && (
           <span className="problem-card-tag">{problem.category}</span>
@@ -35,15 +45,10 @@ export function ProblemCard({
         ) : (
           <span
             className={`problem-card-signal${problem.signal >= 85 ? " is-hot" : ""}`}
-            title="Opportunity score"
+            title="Opportunity score returned by GapRadar"
           >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M8 2.5l1.8 3.9 4.2.4-3.2 2.9.9 4.3L8 11.9l-3.7 2 .9-4.3-3.2-2.9 4.2-.4L8 2.5z"
-                fill="currentColor"
-              />
-            </svg>
-            {problem.signal}
+            <small>Opportunity score</small>
+            <strong>{problem.signal}</strong>
           </span>
         )}
       </div>
@@ -52,6 +57,12 @@ export function ProblemCard({
       <p className="problem-card-description">{problem.description}</p>
 
       <div className="problem-card-meta">
+        <span
+          className="problem-card-trust"
+          title="This opportunity is visible because its source collector currently passes GapRadar reliability gating."
+        >
+          <span aria-hidden="true">✓</span> Trusted source
+        </span>
         {problem.source && (
           <>
             <span className="problem-card-source">{problem.source}</span>
@@ -78,6 +89,9 @@ export function ProblemCard({
           />
         </svg>
       </div>
+      <span className="problem-card-cta" aria-hidden="true">
+        Explore opportunity <span>→</span>
+      </span>
     </article>
   );
 }

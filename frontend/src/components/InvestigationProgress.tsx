@@ -53,11 +53,13 @@ function Phase({
   title,
   state,
   note,
+  summary,
   children,
 }: {
   title: string;
   state: InvestigationPhaseState;
   note?: string | null;
+  summary: string;
   children?: React.ReactNode;
 }) {
   return (
@@ -69,8 +71,17 @@ function Phase({
         <h4 className="ip-phase-title">{title}</h4>
         <span className="ip-state">{STATE_LABEL[state]}</span>
       </header>
+      <p className="ip-summary">{summary}</p>
       {note ? <p className="ip-note">{note}</p> : null}
-      {children ? <div className="ip-rows">{children}</div> : null}
+      {children ? (
+        <details
+          className="ip-details"
+          open={state === "running" || state === "partial" || state === "failed"}
+        >
+          <summary>Measured counters</summary>
+          <div className="ip-rows">{children}</div>
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -108,7 +119,11 @@ export function InvestigationProgress({ run }: { run: InvestigationRun }) {
 
   return (
     <div className="investigation-progress">
-      <Phase title="Planning" state={planning.state}>
+      <Phase
+        title="Planning"
+        state={planning.state}
+        summary={`${planning.research_queries + planning.demand_queries + planning.competitor_queries} search directions`}
+      >
         {planning.research_queries +
           planning.demand_queries +
           planning.competitor_queries >
@@ -127,6 +142,7 @@ export function InvestigationProgress({ run }: { run: InvestigationRun }) {
       <Phase
         title="Academic research"
         state={research.state}
+        summary={`${research.matched} relevant paper${research.matched === 1 ? "" : "s"}`}
         note={
           research.state === "partial"
             ? `${research.queries_completed} of ${research.queries_total} searches returned. Results below come from those.`
@@ -152,6 +168,7 @@ export function InvestigationProgress({ run }: { run: InvestigationRun }) {
       <Phase
         title="Demand evidence"
         state={demand.state}
+        summary={`${demand.accepted} accepted signal${demand.accepted === 1 ? "" : "s"}`}
         note={webPhaseNote(demand, "demand")}
       >
         {demand.queries_total > 0 ? (
@@ -181,6 +198,7 @@ export function InvestigationProgress({ run }: { run: InvestigationRun }) {
       <Phase
         title="Competition"
         state={competitors.state}
+        summary={`${competitors.accepted} candidate${competitors.accepted === 1 ? "" : "s"}`}
         note={webPhaseNote(competitors, "competitor")}
       >
         {competitors.queries_total > 0 ? (

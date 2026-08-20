@@ -19,7 +19,7 @@
   );
   background-size: 20px 20px;
   opacity: 1;
-  transition: opacity 600ms ease;
+  transition: opacity 350ms ease;
 }
 
 .scraping-intro.is-fading {
@@ -100,7 +100,7 @@
     transparent
   );
   filter: blur(1px);
-  animation: scraping-intro-beam-sweep 1600ms linear;
+  animation: scraping-intro-beam-sweep 900ms linear;
 }
 
 @keyframes scraping-intro-beam-sweep {
@@ -126,7 +126,7 @@
   text-align: left;
   opacity: 0;
   transform: scale(0.85);
-  animation: scraping-intro-card-pop 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: scraping-intro-card-pop 300ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes scraping-intro-card-pop {
@@ -177,7 +177,7 @@
   flex: 0 0 auto;
   padding: 20px 22px;
   /* The FLIP move drives this via inline transform; promoting it to its own
-     layer up front keeps that 800ms animation compositor-only instead of
+     layer up front keeps that 500ms animation compositor-only instead of
      falling back to main-thread paint on the first frame. */
   will-change: transform;
 }
@@ -193,9 +193,9 @@
 
 .listing-card.is-rejected {
   transition:
-    opacity 500ms ease,
-    filter 500ms ease,
-    transform 500ms ease;
+    opacity 300ms ease,
+    filter 300ms ease,
+    transform 300ms ease;
   opacity: 0;
   filter: grayscale(1);
   transform: scale(0.82);

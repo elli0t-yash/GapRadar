@@ -25,9 +25,6 @@ function PaperCard({ paper }: { paper: InvestigationPaperMatch }) {
   return (
     <li className="investigation-paper-card">
       <div className="investigation-paper-heading">
-        <span className="investigation-score" title="Relevance to this hypothesis">
-          {Math.round(paper.relevance_score)}
-        </span>
         <div>
           <h3>{paper.title}</h3>
           <p className="investigation-paper-byline">
@@ -38,10 +35,16 @@ function PaperCard({ paper }: { paper: InvestigationPaperMatch }) {
             </time>
           </p>
         </div>
+        <span className="investigation-score" title="Relevance to this hypothesis">
+          {Math.round(paper.relevance_score)} relevance
+        </span>
       </div>
 
       {paper.match_reason ? (
-        <p className="investigation-paper-reason">{paper.match_reason}</p>
+        <div className="investigation-paper-reason">
+          <strong>Why GapRadar matched this</strong>
+          <p>{paper.match_reason}</p>
+        </div>
       ) : null}
 
       <div className="investigation-paper-meta">

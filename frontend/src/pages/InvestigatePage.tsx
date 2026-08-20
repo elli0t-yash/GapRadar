@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { isAbort, NetworkError } from "../api/client";
+import { ApiError, isAbort, NetworkError } from "../api/client";
 import { createInvestigation, listInvestigations } from "../api/investigations";
 import type { Investigation } from "../api/investigationTypes";
 import { ErrorState } from "../components/ErrorState";
@@ -10,7 +10,10 @@ import "./InvestigatePage.css";
 
 function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
-    return "Could not reach the GapRadar API. Start the backend and check its CORS settings.";
+    return "We couldn't connect to GapRadar. Check your connection and try again.";
+  }
+  if (error instanceof ApiError && error.status >= 500) {
+    return "GapRadar couldn't load this workspace just now.";
   }
   return error instanceof Error ? error.message : "The request could not be completed.";
 }
@@ -108,7 +111,7 @@ export function InvestigatePage() {
             </p>
           </header>
 
-          <section className="investigate-create" aria-labelledby="create-investigation-title">
+          <section id="new-investigation" className="investigate-create" aria-labelledby="create-investigation-title">
             <div className="investigate-section-heading">
               <p className="investigate-step">New investigation</p>
               <h2 id="create-investigation-title">
@@ -189,16 +192,22 @@ export function InvestigatePage() {
 
             {listError ? (
               <ErrorState
-                title="Could not load investigations"
+                title="We couldn't load these workspaces"
                 message={listError}
                 onRetry={retryList}
+                note="Your persisted data is safe."
               />
             ) : null}
 
             {investigations?.length === 0 ? (
               <div className="investigation-list-empty">
-                <h3>No investigations yet.</h3>
-                <p>Your saved idea workspaces will appear here.</p>
+                <span className="investigation-empty-radar" aria-hidden="true" />
+                <h3>No investigations yet</h3>
+                <p>
+                  Give GapRadar a market hypothesis and it will look for academic
+                  research, demand signals, and competitor candidates.
+                </p>
+                <a href="#new-investigation">Start an investigation</a>
               </div>
             ) : null}
 

@@ -15,12 +15,32 @@
   color: var(--text-h);
 }
 
+.error-state-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto var(--space-3);
+  place-items: center;
+  border: 1px solid var(--warn-border);
+  border-radius: 50%;
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  font-weight: 850;
+}
+
 .error-state-message {
   margin: 0 auto var(--space-4);
   max-width: 46ch;
   font-size: var(--fs-sm);
   line-height: 1.55;
   color: var(--text-muted);
+}
+
+.error-state-note {
+  margin: calc(var(--space-3) * -1) auto var(--space-4);
+  color: var(--ok-text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
 }
 
 .error-state-retry {

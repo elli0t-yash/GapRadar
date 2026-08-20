@@ -12,7 +12,7 @@ const GROUPS: ReadonlyArray<{
 }> = [
   {
     classification: "contradicts",
-    label: "Contradicting evidence",
+    label: "Evidence against the hypothesis",
     description: "Sources that challenge the hypothesis or point in another direction.",
   },
   {
@@ -36,10 +36,12 @@ function formatPublished(value: string): string {
 }
 
 function Provenance({ queries }: { queries: string[] }) {
-  if (queries.length <= 1) return null;
+  if (queries.length === 0) return null;
   return (
     <details className="evidence-provenance">
-      <summary>Found across {queries.length} search directions</summary>
+      <summary>
+        Found across {queries.length} search direction{queries.length === 1 ? "" : "s"}
+      </summary>
       <ul>
         {queries.map((query) => (
           <li key={query}>{query}</li>
@@ -71,10 +73,13 @@ function EvidenceCard({ evidence }: { evidence: DemandEvidence }) {
         ) : null}
       </p>
       <p className="evidence-snippet">{evidence.snippet}</p>
-      <p className="evidence-reason">{evidence.reason}</p>
+      <div className="evidence-reason">
+        <strong>Why GapRadar included this</strong>
+        <p>{evidence.reason}</p>
+      </div>
       <Provenance queries={evidence.provenance.found_by_queries} />
       <a href={evidence.url} target="_blank" rel="noreferrer">
-        View source ↗
+        Open source <span aria-hidden="true">↗</span>
       </a>
     </li>
   );
@@ -118,6 +123,10 @@ export function DemandEvidenceSection({
             No supporting or contradicting demand evidence was accepted from
             this discovery pass.
           </h3>
+          <p>
+            The completed pass did not produce evidence for or against the
+            hypothesis on this surface.
+          </p>
         </div>
       ) : null}
 

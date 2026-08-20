@@ -10,6 +10,33 @@
   border-radius: var(--radius-lg);
 }
 
+.empty-state-signal {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid var(--accent-border);
+  border-radius: 50%;
+  background: var(--accent-bg);
+}
+
+.empty-state-signal::before {
+  width: 25px;
+  height: 25px;
+  border: 1px solid var(--accent-border);
+  border-radius: 50%;
+  content: "";
+}
+
+.empty-state-signal span {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .empty-state-title {
   font-size: var(--fs-md);
   font-weight: 600;

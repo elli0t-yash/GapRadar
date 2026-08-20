@@ -40,9 +40,6 @@ function PaperCard({ paper }: { paper: ResearchPaperMatch }) {
   return (
     <li className="research-paper">
       <div className="research-paper-top">
-        <span className="research-paper-relevance" title="Relevance to this problem">
-          {Math.round(paper.relevance_score)}
-        </span>
         <div className="research-paper-headline">
           <h4 className="research-paper-title">{paper.title}</h4>
           <p className="research-paper-byline">
@@ -53,6 +50,9 @@ function PaperCard({ paper }: { paper: ResearchPaperMatch }) {
             <span className="research-paper-arxiv">arXiv:{paper.arxiv_id}</span>
           </p>
         </div>
+        <span className="research-paper-relevance" title="Relevance to this problem">
+          {Math.round(paper.relevance_score)} relevance
+        </span>
       </div>
 
       {/* Pre-truncated by the backend at a word boundary. */}
@@ -72,7 +72,10 @@ function PaperCard({ paper }: { paper: ResearchPaperMatch }) {
       </div>
 
       {paper.match_reason && (
-        <p className="research-paper-reason">{paper.match_reason}</p>
+        <div className="research-paper-reason">
+          <strong>Why GapRadar matched this</strong>
+          <p>{paper.match_reason}</p>
+        </div>
       )}
 
       {paper.matched_concepts.length > 0 && (

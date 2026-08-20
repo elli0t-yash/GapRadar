@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { Link } from "react-router-dom";
 import "./Hero.css";
 
 function ScrollArrow({
@@ -34,6 +35,7 @@ export function Hero({
   category,
   onCategoryChange,
   categories,
+  opportunityCount,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
@@ -45,6 +47,7 @@ export function Hero({
    * source for these chips.
    */
   categories: string[];
+  opportunityCount: number | null;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -55,11 +58,51 @@ export function Hero({
   return (
     <section className="hero">
       <div className="container hero-inner">
-        <h1 className="hero-title">
-          Find your
-          <br />
-          next big problem
-        </h1>
+        <div className="hero-story">
+          <div className="hero-copy">
+            <p className="hero-eyebrow">Trust-aware opportunity intelligence</p>
+            <h1 className="hero-title">Find what the market is missing.</h1>
+            <p className="hero-deck">
+              Live market signals become readable, reliability-gated
+              opportunities—with the source trail kept intact.
+            </p>
+
+            <p className="hero-investigate-prompt">
+              Have your own idea?{" "}
+              <Link to="/investigate">
+                Research it with GapRadar <span aria-hidden="true">→</span>
+              </Link>
+            </p>
+
+            <dl className="hero-facts" aria-label="Current opportunity feed">
+              <div>
+                <dt>Trusted opportunities</dt>
+                <dd>{opportunityCount === null ? "—" : opportunityCount}</dd>
+              </div>
+              <div>
+                <dt>Markets represented</dt>
+                <dd>{opportunityCount === null ? "—" : categories.length}</dd>
+              </div>
+              <div className="is-trust">
+                <dt>Source policy</dt>
+                <dd>RecallGuard gated</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="hero-radar" aria-hidden="true">
+            <span className="hero-radar-ring is-one" />
+            <span className="hero-radar-ring is-two" />
+            <span className="hero-radar-ring is-three" />
+            <span className="hero-radar-axis is-horizontal" />
+            <span className="hero-radar-axis is-vertical" />
+            <span className="hero-radar-sweep" />
+            <span className="hero-radar-dot is-a" />
+            <span className="hero-radar-dot is-b" />
+            <span className="hero-radar-dot is-c" />
+            <span className="hero-radar-core">GR</span>
+          </div>
+        </div>
 
         <form
           className="hero-search"
@@ -92,7 +135,7 @@ export function Hero({
           <input
             id="hero-query"
             type="search"
-            placeholder='Try "FinTech"'
+            placeholder='Search a problem, industry, or market gap'
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
           />

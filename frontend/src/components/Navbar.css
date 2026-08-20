@@ -104,10 +104,15 @@
   }
 
   .navbar-nav ul {
-    flex-wrap: wrap;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-1);
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
   }
+
+  .navbar-nav ul::-webkit-scrollbar { display: none; }
+  .navbar-link { white-space: nowrap; }
 
   .navbar-actions {
     order: 2;
@@ -117,4 +122,10 @@
     padding: var(--space-2) var(--space-3);
     text-align: center;
   }
+}
+
+@media (max-width: 360px) {
+  .navbar-inner { padding-right: var(--space-3); padding-left: var(--space-3); }
+  .navbar-brand { font-size: var(--fs-md); }
+  .navbar-cta { padding: 7px 10px; font-size: var(--fs-xs); }
 }

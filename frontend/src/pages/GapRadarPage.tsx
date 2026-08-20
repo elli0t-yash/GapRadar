@@ -1,37 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageShell } from "../components/PageShell";
 import { Hero } from "../components/Hero";
-import { DockingHeading } from "../components/DockingHeading";
 import { ProblemCard } from "../components/ProblemCard";
 import { ProblemDetail } from "../components/ProblemDetail";
-import { RecentShowcase } from "../components/RecentShowcase";
 import { SkeletonCard } from "../components/SkeletonCard";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
-import { NetworkError, isAbort } from "../api/client";
+import { ApiError, NetworkError, isAbort } from "../api/client";
 import { listOpportunities } from "../api/opportunities";
 import { industriesOf, toProblem } from "../api/adapters";
 import type { Problem } from "../types";
 import "./GapRadarPage.css";
 
 const FEATURED_COUNT = 6;
-const SHOWCASE_COUNT = 8;
 
 function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
-    return "Could not reach the GapRadar API. Check the backend is running and that this origin is allowed.";
+    return "We couldn't connect to GapRadar. Check your connection and try again.";
   }
-  return error instanceof Error ? error.message : "Something went wrong.";
+  if (error instanceof ApiError) {
+    return error.status >= 500
+      ? "GapRadar couldn't prepare the opportunity feed just now."
+      : error.message;
+  }
+  return "We couldn't load this intelligence.";
 }
 
-export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
+export function GapRadarPage() {
   const [problems, setProblems] = useState<Problem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
-  const [cardsRevealed, setCardsRevealed] = useState(false);
   // True once the user has touched search or the category chips, including
   // an explicit click back onto "All" -- that is a deliberate "show
   // everything" choice, not the same as never having filtered at all.
@@ -113,17 +114,6 @@ export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
     [filteredProblems, hasFiltered],
   );
 
-  // Server order, the slice after the featured cards so the two sections do
-  // not show the same opportunities. Deliberately NOT sorted by date: every
-  // opportunity in the current corpus shares one ingestion timestamp, so a
-  // date sort would imply a recency ordering the data does not carry.
-  const showcaseProblems = useMemo(() => {
-    if (hasFiltered) return [];
-    const rest = filteredProblems.slice(FEATURED_COUNT);
-    const pool = rest.length > 0 ? rest : filteredProblems;
-    return pool.slice(0, SHOWCASE_COUNT);
-  }, [filteredProblems, hasFiltered]);
-
   return (
     <PageShell>
       <Hero
@@ -132,32 +122,27 @@ export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
         category={category}
         onCategoryChange={handleCategoryChange}
         categories={categories}
+        opportunityCount={problems?.length ?? null}
       />
 
       <div className="gapradar-content">
         <div className="container">
-          <DockingHeading
-            ready={introDone}
-            onDockComplete={() => setCardsRevealed(true)}
-          />
-
-          {cardsRevealed && (
-            <section className="gapradar-section">
+          <section className="gapradar-section" aria-labelledby="opportunity-feed-title">
               <div className="gapradar-section-header">
-                <h2>
-                  {/* Counted from the feed itself -- never from dashboard
-                      signal totals, which include untrusted signals. */}
-                  Choose from {problems?.length ?? 0} problems worth solving{" "}
-                  <span className="gapradar-stars" aria-hidden="true">
-                    ★★★★★
-                  </span>
-                </h2>
+                <p className="gapradar-section-eyebrow">Opportunity radar</p>
+                <h2 id="opportunity-feed-title">Where are the strongest market gaps?</h2>
                 <p className="gapradar-section-subtitle">
-                  Sorted by signal strength
+                  Ranked by the opportunity score returned by GapRadar. The first
+                  result is the strongest trusted opportunity in this view.
                 </p>
               </div>
 
               <div className="gapradar-grid">
+                {isLoading ? (
+                  <p className="visually-hidden" role="status">
+                    Loading trusted opportunities…
+                  </p>
+                ) : null}
                 {isLoading &&
                   Array.from({ length: FEATURED_COUNT }).map((_, i) => (
                     <SkeletonCard key={i} />
@@ -165,7 +150,7 @@ export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
 
                 {loadError && (
                   <ErrorState
-                    title="Could not load opportunities"
+                    title="We couldn't load this intelligence"
                     message={loadError}
                     onRetry={retry}
                   />
@@ -179,39 +164,22 @@ export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
                   ) : (
                     <EmptyState
                       title="No trusted opportunities right now"
-                      subtitle="The feed is empty. Nothing is being withheld locally — this is what the backend returned."
-                      onReset={resetFilters}
+                      subtitle="GapRadar has no reliability-gated opportunities to show in this feed yet. A valid zero state is not an error."
                     />
                   ))}
 
                 {!isLoading &&
                   !loadError &&
-                  featuredProblems.map((problem) => (
+                  featuredProblems.map((problem, index) => (
                     <ProblemCard
                       key={problem.id}
                       problem={problem}
                       onOpen={setActiveProblem}
+                      rank={index + 1}
+                      featured={index === 0}
                     />
                   ))}
               </div>
-            </section>
-          )}
-
-          <section className="gapradar-section">
-            {isLoading && (
-              <div className="gapradar-grid">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
-            )}
-
-            {!isLoading && !loadError && showcaseProblems.length > 0 && (
-              <RecentShowcase
-                problems={showcaseProblems}
-                onOpen={setActiveProblem}
-              />
-            )}
           </section>
         </div>
       </div>
