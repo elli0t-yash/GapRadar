@@ -32,6 +32,10 @@ export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
   const [category, setCategory] = useState("All");
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
   const [cardsRevealed, setCardsRevealed] = useState(false);
+  // True once the user has touched search or the category chips, including
+  // an explicit click back onto "All" -- that is a deliberate "show
+  // everything" choice, not the same as never having filtered at all.
+  const [hasFiltered, setHasFiltered] = useState(false);
 
   // The one place the Discover feed is loaded. `limit=200` is the backend's
   // maximum and returns the whole corpus, so search and industry filtering
@@ -73,25 +77,20 @@ export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
     });
   }, [problems, query, category]);
 
-  // Server order, first slice.
-  const featuredProblems = useMemo(
-    () => filteredProblems.slice(0, FEATURED_COUNT),
-    [filteredProblems],
-  );
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    setHasFiltered(true);
+  }, []);
 
-  // Server order, the slice after the featured cards so the two sections do
-  // not show the same opportunities. Deliberately NOT sorted by date: every
-  // opportunity in the current corpus shares one ingestion timestamp, so a
-  // date sort would imply a recency ordering the data does not carry.
-  const showcaseProblems = useMemo(() => {
-    const rest = filteredProblems.slice(FEATURED_COUNT);
-    const pool = rest.length > 0 ? rest : filteredProblems;
-    return pool.slice(0, SHOWCASE_COUNT);
-  }, [filteredProblems]);
+  const handleCategoryChange = useCallback((value: string) => {
+    setCategory(value);
+    setHasFiltered(true);
+  }, []);
 
   const resetFilters = useCallback(() => {
     setQuery("");
     setCategory("All");
+    setHasFiltered(false);
   }, []);
 
   const retry = useCallback(() => {
@@ -102,13 +101,36 @@ export function GapRadarPage({ introDone = true }: { introDone?: boolean }) {
   const isLoading = problems === null && loadError === null;
   const isFiltering = query.trim().length > 0 || category !== "All";
 
+  // Server order. The featured grid shows every match once the user has
+  // touched search or the category chips -- including an explicit click
+  // back onto "All" -- so "Choose from N problems" is never a lie. Only the
+  // untouched, unfiltered landing state is capped to a curated preview.
+  const featuredProblems = useMemo(
+    () =>
+      hasFiltered
+        ? filteredProblems
+        : filteredProblems.slice(0, FEATURED_COUNT),
+    [filteredProblems, hasFiltered],
+  );
+
+  // Server order, the slice after the featured cards so the two sections do
+  // not show the same opportunities. Deliberately NOT sorted by date: every
+  // opportunity in the current corpus shares one ingestion timestamp, so a
+  // date sort would imply a recency ordering the data does not carry.
+  const showcaseProblems = useMemo(() => {
+    if (hasFiltered) return [];
+    const rest = filteredProblems.slice(FEATURED_COUNT);
+    const pool = rest.length > 0 ? rest : filteredProblems;
+    return pool.slice(0, SHOWCASE_COUNT);
+  }, [filteredProblems, hasFiltered]);
+
   return (
     <PageShell>
       <Hero
         query={query}
-        onQueryChange={setQuery}
+        onQueryChange={handleQueryChange}
         category={category}
-        onCategoryChange={setCategory}
+        onCategoryChange={handleCategoryChange}
         categories={categories}
       />
 

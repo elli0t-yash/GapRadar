@@ -67,6 +67,12 @@
   color: var(--text-h);
 }
 
+/* The pill itself rings via .hero-search:focus-within -- suppress the
+   global :focus-visible ring here so the input doesn't get a second one. */
+.hero-search input:focus-visible {
+  box-shadow: none;
+}
+
 .hero-search input::placeholder {
   color: var(--text-muted);
 }

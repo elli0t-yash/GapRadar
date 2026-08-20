@@ -173,6 +173,10 @@
   min-height: 190px;
   flex: 0 0 auto;
   padding: 20px 22px;
+  /* The FLIP move drives this via inline transform; promoting it to its own
+     layer up front keeps that 800ms animation compositor-only instead of
+     falling back to main-thread paint on the first frame. */
+  will-change: transform;
 }
 
 .listing-card.is-settled .listing-card-tag {
@@ -194,7 +198,7 @@
   transform: scale(0.82);
 }
 
-.listing-card.is-settled.is-kept {
+.listing-card.is-kept-highlight {
   border-color: var(--intro-accent);
   box-shadow:
     0 0 0 4px rgba(244, 80, 46, 0.16),
@@ -252,7 +256,7 @@
   color: var(--intro-accent);
 }
 
-.listing-card.is-settled.is-kept:nth-child(odd) {
+.listing-card.is-kept-highlight:nth-child(odd) {
   border-color: #fff;
   box-shadow:
     0 0 0 4px rgba(255, 255, 255, 0.35),
@@ -294,6 +298,23 @@
   .scraping-intro-caption {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* Laptop viewports (roughly 901-1440px): the settled cards at their full
+   260px size read oversized against the smaller grid cells they flew in
+   from, exaggerating the FLIP scale jump. Shrinking them here keeps the
+   before/after size delta -- and the resulting stretch -- modest. */
+@media (max-width: 1440px) and (min-width: 901px) {
+  .listing-card.is-settled {
+    width: 208px;
+    min-height: 158px;
+    padding: 16px 18px;
+  }
+
+  .listing-card.is-settled .listing-card-title {
+    font-size: 15px;
+    -webkit-line-clamp: 4;
   }
 }
 
