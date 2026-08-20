@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { ThemeToggle } from "./ThemeToggle";
 import "./Navbar.css";
 
 const NAV_ITEMS = [
@@ -39,14 +40,17 @@ export function Navbar() {
           </ul>
         </nav>
 
-        <a
-          className="navbar-cta"
-          href="https://razorpay.com/m/fix-my-itch/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Submit a problem
-        </a>
+        <div className="navbar-actions">
+          <ThemeToggle />
+          <a
+            className="navbar-cta"
+            href="https://razorpay.com/m/fix-my-itch/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Submit a problem
+          </a>
+        </div>
       </div>
     </header>
   );

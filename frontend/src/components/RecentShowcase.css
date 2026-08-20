@@ -12,7 +12,7 @@
 }
 
 .recent-showcase-stars {
-  color: #ff6600;
+  color: var(--accent);
   font-size: var(--fs-lg);
   letter-spacing: 2px;
 }
@@ -122,8 +122,8 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: rgba(255, 102, 0, 0.14);
-  color: #8a3a00;
+  background: var(--accent-bg);
+  color: var(--tone-warm-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,7 +140,7 @@
 .recent-showcase-name {
   font-size: var(--fs-base);
   font-weight: 700;
-  color: #8a3a00;
+  color: var(--tone-warm-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -149,13 +149,14 @@
 .recent-showcase-role {
   font-size: var(--fs-xs);
   font-weight: 600;
-  color: rgba(138, 58, 0, 0.65);
+  color: var(--tone-warm-text);
+  opacity: 0.72;
 }
 
 .recent-showcase-title {
   font-size: var(--fs-base);
   font-weight: 600;
-  color: #8a3a00;
+  color: var(--tone-warm-text);
   line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 6;
@@ -170,8 +171,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  background: #ffffff;
-  color: #8a3a00;
+  background: var(--bg-raised);
+  color: var(--accent-text);
   font-size: var(--fs-xs);
   font-weight: 700;
   padding: 8px var(--space-3);
@@ -181,31 +182,32 @@
 }
 
 .stars {
-  color: #ff6600;
+  color: var(--accent);
   letter-spacing: 1px;
   font-size: var(--fs-sm);
 }
 
 .tone-orange {
-  background: #ffe0cc;
+  background: var(--tone-warm-bg);
 }
 
 .tone-deep {
-  background: #ff6600;
+  background: var(--tone-deep-bg);
 }
 
 .tone-deep .recent-showcase-avatar {
   background: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
+  color: var(--tone-deep-text);
 }
 
 .tone-deep .recent-showcase-name,
 .tone-deep .recent-showcase-title {
-  color: #ffffff;
+  color: var(--tone-deep-text);
 }
 
 .tone-deep .recent-showcase-role {
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--tone-deep-text);
+  opacity: 0.75;
 }
 
 @media (max-width: 760px) {

@@ -31,10 +31,10 @@
 .investigation-result-warning {
   margin-bottom: var(--space-4);
   padding: 10px 12px;
-  border: 1px solid rgba(200, 130, 0, 0.3);
+  border: 1px solid var(--warn-border);
   border-radius: var(--radius-sm);
-  background: rgba(200, 130, 0, 0.08);
-  color: #8f5c00;
+  background: var(--warn-bg);
+  color: var(--warn-text);
   font-size: var(--fs-sm);
 }
 

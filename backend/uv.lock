@@ -63,11 +63,13 @@ wheels = [
 [[package]]
 name = "backend"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "click" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "httpx2" },
     { name = "mcp" },
     { name = "openai" },
     { name = "psycopg", extra = ["binary"] },
@@ -87,8 +89,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.19.1" },
+    { name = "click", specifier = ">=8.4,<9" },
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx2", specifier = ">=2,<3" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "openai", specifier = ">=3.3.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },

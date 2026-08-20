@@ -1,9 +1,9 @@
 .gapradar-content {
   flex: 1;
-  background-color: #fffaf5;
+  background-color: var(--bg);
   background-image: radial-gradient(
     circle,
-    rgba(244, 80, 46, 0.08) 1px,
+    var(--dot-grid) 1px,
     transparent 1.2px
   );
   background-size: 22px 22px;
