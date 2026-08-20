@@ -22,6 +22,10 @@ from app.api.v1.deps import DbSession, InvestigationScheduler
 from app.db.models import Investigation
 from app.domain.enums import ResearchSubjectOrigin
 from app.exceptions import AppError
+from app.investigations.actions import (
+    InvestigationNotFoundError,
+    start_investigation_analysis,
+)
 from app.investigations.evidence import (
     DEFAULT_LIMIT as EVIDENCE_DEFAULT_LIMIT,
 )
@@ -35,7 +39,6 @@ from app.investigations.evidence import (
 from app.investigations.runs import (
     latest_run,
     reconcile_stale_investigation_runs,
-    start_run,
 )
 from app.investigations.schemas import (
     CompetitorCollection,
@@ -138,28 +141,20 @@ def start_investigation_run(
     backend restart can be run again rather than being blocked forever by
     the active-run index.
     """
-    investigation = get_investigation(session, investigation_id=investigation_id)
-    if investigation is None:
-        raise AppError(
-            f"investigation {investigation_id} not found", status_code=404
-        )
-
-    reconcile_stale_investigation_runs(session)
-
-    run, already_running = start_run(session, investigation=investigation)
-
-    if not already_running:
+    def submit(run_id: uuid.UUID) -> None:
         # Runs after the response is sent, in this process. Local only,
         # and deliberately not treated as durable -- see
         # app.investigations.background.
-        background.add_task(schedule, run.id)
+        background.add_task(schedule, run_id)
 
-    return InvestigationRunAccepted(
-        run_id=run.id,
-        investigation_id=investigation_id,
-        status=run.status,
-        already_running=already_running,
-    )
+    try:
+        return start_investigation_analysis(
+            session,
+            investigation_id=investigation_id,
+            submit=submit,
+        )
+    except InvestigationNotFoundError as exc:
+        raise AppError(str(exc), status_code=404) from exc
 
 
 @router.get("/{investigation_id}/run", response_model=InvestigationRunRead | None)

@@ -14,6 +14,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # The MCP surface is a trusted agent interface with provider-spending
+    # actions. Empty (or shorter than 32 characters) keeps /mcp unavailable;
+    # there is deliberately no development password.
+    GAPRADAR_MCP_API_KEY: str = ""
+    # MCP has its own DNS-rebinding boundary. These values are exact Host and
+    # Origin header allowlists, independent of browser CORS. Railway must add
+    # its public backend hostname explicitly.
+    GAPRADAR_MCP_ALLOWED_HOSTS: str = "127.0.0.1:*,localhost:*,[::1]:*"
+    GAPRADAR_MCP_ALLOWED_ORIGINS: str = (
+        "http://127.0.0.1:*,http://localhost:*,http://[::1]:*"
+    )
+
     BRIGHTDATA_API_KEY: str = ""
     BRIGHTDATA_BASE_URL: str = "https://api.brightdata.com"
     # The Bright Data SERP API zone used for investigation web discovery.
@@ -84,6 +96,24 @@ class Settings(BaseSettings):
         return [
             origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()
         ]
+
+    @property
+    def mcp_api_key_is_configured(self) -> bool:
+        """Whether remote MCP has a non-empty minimum-length secret."""
+
+        return len(self.GAPRADAR_MCP_API_KEY) >= 32
+
+    @property
+    def mcp_allowed_hosts_list(self) -> list[str]:
+        return self._comma_separated(self.GAPRADAR_MCP_ALLOWED_HOSTS)
+
+    @property
+    def mcp_allowed_origins_list(self) -> list[str]:
+        return self._comma_separated(self.GAPRADAR_MCP_ALLOWED_ORIGINS)
+
+    @staticmethod
+    def _comma_separated(value: str) -> list[str]:
+        return [item.strip() for item in value.split(",") if item.strip()]
 
 
 @lru_cache
