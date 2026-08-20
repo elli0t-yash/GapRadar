@@ -33,7 +33,7 @@ from app.research_intelligence.query_generation import (
     ResearchQueryGenerationError,
     ResearchQueryProviderError,
 )
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
 
 logger = logging.getLogger(__name__)
 
@@ -109,19 +109,25 @@ useless provider jobs are not.
 """
 
 
-def plan_prompt(context: MarketContext) -> str:
-    """The problem, as the model sees it. Contains no credential."""
+def plan_prompt(subject: ResearchSubject) -> str:
+    """The problem, as the model sees it. Contains no credential.
+
+    Reads `subject.problem`. It used to read `context.title`, which no
+    contract on this side has ever defined -- so every real fallback call
+    raised AttributeError before reaching the model. Nothing caught it
+    because no test constructed this generator against a live context.
+    """
     parts = [
         "MARKET PROBLEM",
-        context.title,
+        subject.problem,
     ]
-    if context.description:
-        parts += ["", "DESCRIPTION", context.description]
-    if context.industry:
+    if subject.description:
+        parts += ["", "DESCRIPTION", subject.description]
+    if subject.industry:
         parts += [
             "",
             "INDUSTRY (context only -- never the subject of a query)",
-            context.industry,
+            subject.industry,
         ]
     return "\n".join(parts)
 
@@ -176,7 +182,7 @@ class OpenAIResearchQueryGenerator:
             )
         self._client = openai.OpenAI(api_key=resolved.OPENAI_API_KEY)
 
-    def generate(self, context: MarketContext) -> ResearchQueryPlan:
+    def generate(self, subject: ResearchSubject) -> ResearchQueryPlan:
         """One plan for one problem.
 
         Raises LlmQueryPlanError when the answer is unusable, and
@@ -184,8 +190,8 @@ class OpenAIResearchQueryGenerator:
         reached -- the caller maps those to different outcome reasons
         because only one of them is worth retrying.
         """
-        payload = self._request(context)
-        queries = _clean_queries(payload.get("queries"), context)
+        payload = self._request(subject)
+        queries = _clean_queries(payload.get("queries"), subject)
         concepts = _clean_concepts(payload.get("concepts"))
 
         if len(queries) != QUERY_COUNT:
@@ -199,9 +205,11 @@ class OpenAIResearchQueryGenerator:
             "[research-enrichment] llm query fallback produced queries=%r",
             queries,
         )
-        return ResearchQueryPlan(queries=queries, concepts=concepts)
+        return ResearchQueryPlan(
+            subject_id=subject.subject_id, queries=queries, concepts=concepts
+        )
 
-    def _request(self, context: MarketContext) -> dict[str, Any]:
+    def _request(self, subject: ResearchSubject) -> dict[str, Any]:
         """One structured plan. Raw provider output stops here."""
         try:
             response = self._client.chat.completions.create(
@@ -218,7 +226,7 @@ class OpenAIResearchQueryGenerator:
                 },
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": plan_prompt(context)},
+                    {"role": "user", "content": plan_prompt(subject)},
                 ],
             )
         except (
@@ -304,7 +312,7 @@ def _tokens(value: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", value.lower())
 
 
-def _clean_queries(raw: Any, context: MarketContext) -> list[str]:
+def _clean_queries(raw: Any, subject: ResearchSubject) -> list[str]:
     """Keep only queries worth spending a provider job on.
 
     Every rejection here is a query that would otherwise have cost a real
@@ -314,7 +322,7 @@ def _clean_queries(raw: Any, context: MarketContext) -> list[str]:
     if not isinstance(raw, list):
         return []
 
-    industry = _normalize(context.industry or "")
+    industry = _normalize(subject.industry or "")
     industry_tokens = set(_tokens(industry)) if industry else set()
 
     kept: list[str] = []

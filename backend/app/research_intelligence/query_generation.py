@@ -7,13 +7,17 @@ problem statement verbatim finds nothing, so the statement has to be
 re-expressed in the vocabulary the literature actually uses.
 
 Nothing here touches a provider, a database, or a network. It reads a
-MarketContext and returns a plan; acquisition is somebody else's job.
+ResearchSubject and returns a plan; acquisition is somebody else's job.
+
+The subject may be a market Signal or a user-supplied Investigation. This
+module cannot tell and must not care: the translation from pain wording
+to research wording is the same problem either way.
 """
 
 import re
 from typing import Protocol
 
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
 
 # Exactly three per opportunity for v1: enough angles to catch adjacent
 # literature, few enough that a fan-out stays cheap and explainable.
@@ -186,7 +190,7 @@ class ResearchQueryGenerator(Protocol):
     and must not perform acquisition.
     """
 
-    def generate(self, context: MarketContext) -> ResearchQueryPlan: ...
+    def generate(self, subject: ResearchSubject) -> ResearchQueryPlan: ...
 
 
 # -- the deterministic generator --------------------------------------------
@@ -415,8 +419,8 @@ class ConceptQueryGenerator:
     def __init__(self, *, queries: int = QUERIES_PER_OPPORTUNITY) -> None:
         self.queries = queries
 
-    def generate(self, context: MarketContext) -> ResearchQueryPlan:
-        domain_terms = self._domain_terms(context)
+    def generate(self, subject: ResearchSubject) -> ResearchQueryPlan:
+        domain_terms = self._domain_terms(subject)
         if not domain_terms:
             # The lexicon recognised nothing and there is no industry to
             # fall back on. Generic queries ("operations research") would
@@ -424,8 +428,8 @@ class ConceptQueryGenerator:
             # fails closed instead -- and the empty concept list is the
             # signal that this context is what an LLM generator is for.
             raise ResearchQueryGenerationError(
-                f"no research vocabulary could be derived for signal "
-                f"{context.signal_id}; the problem wording matches no known "
+                f"no research vocabulary could be derived for subject "
+                f"{subject.subject_id}; the problem wording matches no known "
                 "concept and no industry was supplied"
             )
         candidates = self._candidate_queries(domain_terms)
@@ -434,25 +438,25 @@ class ConceptQueryGenerator:
         if len(selected) < self.queries:
             raise ResearchQueryGenerationError(
                 f"only {len(selected)} distinct research queries could be built "
-                f"for signal {context.signal_id}; {self.queries} are required"
+                f"for subject {subject.subject_id}; {self.queries} are required"
             )
 
         return ResearchQueryPlan(
-            signal_id=context.signal_id,
+            subject_id=subject.subject_id,
             queries=selected,
             concepts=domain_terms,
             rationale=(
                 "Pain vocabulary mapped to research terminology by lexicon: "
                 + ", ".join(domain_terms[:4])
                 + (
-                    f" (industry: {context.industry})"
-                    if context.industry
+                    f" (industry: {subject.industry})"
+                    if subject.industry
                     else " (no industry supplied)"
                 )
             ),
         )
 
-    def _domain_terms(self, context: MarketContext) -> list[str]:
+    def _domain_terms(self, subject: ResearchSubject) -> list[str]:
         """Research terms implied by this context, most salient first.
 
         The title is read before the description because it states the
@@ -467,19 +471,19 @@ class ConceptQueryGenerator:
                 seen.add(term)
                 terms.append(term)
 
-        for source in (context.problem, context.description):
+        for source in (subject.problem, subject.description):
             for token in tokenize(source):
                 mapped = _DOMAIN_LEXICON.get(token)
                 if mapped:
                     add(mapped)
 
-        if context.industry:
-            key = context.industry.strip().lower()
+        if subject.industry:
+            key = subject.industry.strip().lower()
             for term in _INDUSTRY_LEXICON.get(key, ()):
                 add(term)
             # An unmapped industry is still a real subject word.
             if key not in _INDUSTRY_LEXICON:
-                for token in tokenize(context.industry):
+                for token in tokenize(subject.industry):
                     mapped = _DOMAIN_LEXICON.get(token)
                     add(mapped if mapped else f"{token} systems")
 

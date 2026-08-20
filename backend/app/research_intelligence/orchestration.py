@@ -1,37 +1,47 @@
-"""One opportunity, end to end: pain -> queries -> papers -> matches.
+"""One SUBJECT, end to end: pain -> queries -> papers -> matches.
 
-    Signal
+    Signal or Investigation
+      -> ResearchSubject                    (schemas / service)
       -> generate 3 research queries        (query_generation)
       -> collector.search(query) x3         (acquisition, injected)
       -> ingest_arxiv_search_results        (service)
       -> dedupe candidate papers
       -> rank_candidates                    (candidates, cheap)
       -> matcher.judge                      (matching, expensive)
-      -> OpportunityResearchMatch rows      (upserted)
+      -> match rows for that subject        (persistence, upserted)
+
+ONE ENGINE, TWO SUBJECTS. There is deliberately no
+`research_for_signal` / `research_for_investigation` pair: every step
+above is identical for a trusted market Signal and for a user-supplied
+Investigation, and duplicating them would give the pipeline a second
+place to drift. The only thing that varies is which table a verdict
+lands in and which foreign key a search is attributed to, and both come
+from the subject itself via app.research_intelligence.persistence.
+
+PROVENANCE IS NOT ERASED BY THE GENERALISATION. `subject.origin` reaches
+this boundary intact and is what selects the persistence, so an
+investigation's verdicts can never be written where an opportunity's
+live. Nothing here treats a user hypothesis as validated market
+evidence; it researches what it is given and says which kind it was.
 
 Every expensive or external step arrives as a parameter -- the collector,
 the generator, the matcher -- so this module names no provider and no
 vendor, and the whole flow runs in a unit test with no network.
 
-Nothing here schedules anything. One opportunity, when asked.
+Nothing here schedules anything. One subject, when asked.
 """
 
 import logging
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import (
-    OpportunityResearchMatch,
-    ResearchPaper,
-    Signal,
-)
-from app.domain.enums import ResearchQueryStatus
+from app.db.models import ResearchPaper, Signal
+from app.domain.enums import ResearchQueryStatus, ResearchSubjectOrigin
 from app.research_intelligence.acquisition import (
     ResearchCollector,
 )
@@ -46,17 +56,21 @@ from app.research_intelligence.matching import (
     ConceptOverlapMatcher,
     ReportsJudgingFailures,
     ResearchMatchPolicy,
-    ResearchMatchVerdict,
     SemanticMatcher,
+)
+from app.research_intelligence.persistence import (
+    ResearchMatchStore,
+    match_store_for,
+    search_run_attribution,
 )
 from app.research_intelligence.query_generation import (
     ConceptQueryGenerator,
     ResearchQueryGenerator,
 )
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
 from app.research_intelligence.service import (
     ingest_arxiv_search_results,
-    market_context_from_signal,
+    research_subject_from_signal,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,11 +107,12 @@ class ResearchQueryOutcome(BaseModel):
 
 
 class ResearchEnrichmentResult(BaseModel):
-    """The outcome of enriching one opportunity."""
+    """The outcome of researching one subject."""
 
     model_config = ConfigDict(frozen=True)
 
-    signal_id: uuid.UUID
+    subject_id: uuid.UUID
+    origin: ResearchSubjectOrigin
     plan: ResearchQueryPlan
     queries: list[ResearchQueryOutcome] = Field(default_factory=list)
     # Distinct papers across all three searches, after dedupe.
@@ -162,10 +177,10 @@ class ResearchEnrichmentResult(BaseModel):
         )
 
 
-def enrich_opportunity_with_research(
+def research_subject(
     session: Session,
     *,
-    signal: Signal,
+    subject: ResearchSubject,
     collector: ResearchCollector,
     generator: ResearchQueryGenerator | None = None,
     matcher: SemanticMatcher | None = None,
@@ -174,13 +189,22 @@ def enrich_opportunity_with_research(
     on_progress: ProgressCallback | None = None,
     acquisition_budget_seconds: float = RESEARCH_ACQUISITION_BUDGET_SECONDS,
 ) -> ResearchEnrichmentResult:
-    """Find and judge research for ONE opportunity.
+    """Find and judge research for ONE subject. THE ONLY ENGINE.
 
     Args:
-        signal: the persisted Signal behind the Opportunity. Trust is the
-            CALLER's decision -- this function enriches what it is given,
-            and the API layer is where "is this opportunity visible" is
-            enforced, exactly as it already is for the Discover feed.
+        subject: what is being researched, and what kind of thing it is.
+            A trusted market Signal and a user-supplied Investigation
+            both arrive here as one of these, take the identical path
+            through generation, acquisition, ranking and judging, and
+            differ only in where the verdicts are written -- which is
+            derived from `subject.origin`, never passed in alongside it.
+
+            TRUST IS THE CALLER'S DECISION. This function researches what
+            it is given; the API layer is where "is this opportunity
+            visible" is enforced, exactly as it already is for the
+            Discover feed. What this function guarantees instead is that
+            the subject's provenance survives to persistence, so a user
+            hypothesis' verdicts never land in the opportunity tables.
         collector: injected. The only thing that touches a provider.
         generator / matcher: injected, defaulting to the deterministic
             implementations so a caller that has no LLM wired up still
@@ -206,7 +230,7 @@ def enrich_opportunity_with_research(
     blocking the two that already finished.
 
     Re-running is safe. Papers upsert by arxiv_id, and match rows upsert
-    by (signal_id, research_paper_id), so a second run updates verdicts
+    by (subject, research_paper_id), so a second run updates verdicts
     instead of stacking duplicates. Each run does record new
     ResearchSearchRun rows -- searching twice really did happen twice,
     and collapsing that would destroy the provenance.
@@ -214,20 +238,19 @@ def enrich_opportunity_with_research(
     generator = generator or ConceptQueryGenerator()
     matcher = matcher or ConceptOverlapMatcher()
 
-    context = market_context_from_signal(signal)
-    plan = generator.generate(context)
+    plan = generator.generate(subject)
 
     outcomes, paper_ids = _run_searches(
         session,
         plan=plan,
-        signal_id=signal.id,
+        subject=subject,
         collector=collector,
         on_progress=on_progress,
         acquisition_budget_seconds=acquisition_budget_seconds,
     )
     papers = _load_papers(session, paper_ids)
 
-    candidates = rank_candidates(context, plan, papers, limit=policy.candidate_limit)
+    candidates = rank_candidates(subject, plan, papers, limit=policy.candidate_limit)
     logger.info(
         "[research-enrichment] semantic matching started candidates=%d papers=%d",
         len(candidates),
@@ -236,8 +259,7 @@ def enrich_opportunity_with_research(
     failures_before = _judging_failures(matcher)
     created, updated, rejected = _judge_and_persist(
         session,
-        signal_id=signal.id,
-        context=context,
+        subject=subject,
         plan=plan,
         candidates=candidates,
         papers={paper.id: paper for paper in papers},
@@ -249,7 +271,8 @@ def enrich_opportunity_with_research(
         session.commit()
 
     result = ResearchEnrichmentResult(
-        signal_id=signal.id,
+        subject_id=subject.subject_id,
+        origin=subject.origin,
         plan=plan,
         queries=outcomes,
         candidate_paper_count=len(papers),
@@ -260,9 +283,10 @@ def enrich_opportunity_with_research(
         judging_failures=_judging_failures(matcher) - failures_before,
     )
     logger.info(
-        "opportunity_research_enriched",
+        "subject_research_enriched",
         extra={
-            "signal_id": str(signal.id),
+            "subject_id": str(subject.subject_id),
+            "subject_origin": subject.origin.value,
             "queries": plan.queries,
             "failed_queries": result.failed_queries,
             "candidate_papers": result.candidate_paper_count,
@@ -279,7 +303,7 @@ def _run_searches(
     session: Session,
     *,
     plan: ResearchQueryPlan,
-    signal_id: uuid.UUID,
+    subject: ResearchSubject,
     collector: ResearchCollector,
     on_progress: ProgressCallback | None = None,
     acquisition_budget_seconds: float = RESEARCH_ACQUISITION_BUDGET_SECONDS,
@@ -336,7 +360,7 @@ def _run_searches(
             session,
             query=execution.query,
             records=collected.records,
-            signal_id=signal_id,
+            **search_run_attribution(subject),
             searched_at=collected.searched_at or datetime.now(UTC),
             provider_job_id=collected.provider_job_id,
             # One transaction for the whole enrichment: a crash halfway
@@ -414,22 +438,29 @@ def _load_papers(
 def _judge_and_persist(
     session: Session,
     *,
-    signal_id: uuid.UUID,
-    context: MarketContext,
+    subject: ResearchSubject,
     plan: ResearchQueryPlan,
     candidates: list[RankedCandidate],
     papers: dict[uuid.UUID, ResearchPaper],
     matcher: SemanticMatcher,
     policy: ResearchMatchPolicy,
+    store: ResearchMatchStore | None = None,
 ) -> tuple[int, int, int]:
-    """Judge each surviving candidate and upsert the accepted verdicts."""
+    """Judge each surviving candidate and upsert the accepted verdicts.
+
+    The store comes from the SUBJECT, not from the caller, so a verdict
+    about a user hypothesis cannot be written into the opportunity table
+    by passing the wrong pair of arguments. It is overridable only so a
+    test can observe the writes.
+    """
+    store = store or match_store_for(subject)
     created = 0
     updated = 0
     rejected = 0
 
     for candidate in candidates:
         paper = papers[candidate.research_paper_id]
-        verdict = matcher.judge(context=context, plan=plan, paper=paper)
+        verdict = matcher.judge(subject=subject, plan=plan, paper=paper)
         if verdict is None:
             # Declined to judge. Not evidence of irrelevance, so it is
             # not counted as a rejection and nothing is written.
@@ -438,9 +469,7 @@ def _judge_and_persist(
             rejected += 1
             continue
 
-        if _upsert_match(
-            session, signal_id=signal_id, paper_id=paper.id, verdict=verdict
-        ):
+        if store.upsert(session, paper_id=paper.id, verdict=verdict):
             created += 1
         else:
             updated += 1
@@ -448,44 +477,37 @@ def _judge_and_persist(
     return created, updated, rejected
 
 
-def _upsert_match(
+def enrich_opportunity_with_research(
     session: Session,
     *,
-    signal_id: uuid.UUID,
-    paper_id: uuid.UUID,
-    verdict: ResearchMatchVerdict,
-) -> bool:
-    """Write one verdict. Returns True if a row was created.
+    signal: Signal,
+    collector: ResearchCollector,
+    generator: ResearchQueryGenerator | None = None,
+    matcher: SemanticMatcher | None = None,
+    policy: ResearchMatchPolicy = DEFAULT_MATCH_POLICY,
+    commit: bool = True,
+    on_progress: ProgressCallback | None = None,
+    acquisition_budget_seconds: float = RESEARCH_ACQUISITION_BUDGET_SECONDS,
+) -> ResearchEnrichmentResult:
+    """Research one trusted opportunity. A thin adapter over `research_subject`.
 
-    One verdict per (opportunity, paper): re-running the matcher replaces
-    the previous judgement rather than stacking a second, near-identical
-    claim, so "how relevant is this paper to this opportunity" always has
-    exactly one answer.
+    Exists because the opportunity path holds a Signal, not a subject,
+    and turning one into the other has a single correct answer
+    (app.research_intelligence.service.research_subject_from_signal)
+    that every caller should not have to restate.
+
+    NOT A SECOND ENGINE. It builds a subject and delegates; there is no
+    acquisition, ranking, judging or persistence logic here that the
+    investigation path does not also run.
     """
-    existing = session.execute(
-        select(OpportunityResearchMatch).where(
-            OpportunityResearchMatch.signal_id == signal_id,
-            OpportunityResearchMatch.research_paper_id == paper_id,
-        )
-    ).scalar_one_or_none()
-
-    values: dict[str, Any] = {
-        "relevance_score": verdict.relevance_score,
-        "matched_concepts": list(verdict.matched_concepts),
-        "match_reason": verdict.match_reason,
-        "technical_readiness_score": verdict.technical_readiness_score,
-    }
-
-    if existing is not None:
-        for field, value in values.items():
-            setattr(existing, field, value)
-        session.flush()
-        return False
-
-    session.add(
-        OpportunityResearchMatch(
-            signal_id=signal_id, research_paper_id=paper_id, **values
-        )
+    return research_subject(
+        session,
+        subject=research_subject_from_signal(signal),
+        collector=collector,
+        generator=generator,
+        matcher=matcher,
+        policy=policy,
+        commit=commit,
+        on_progress=on_progress,
+        acquisition_budget_seconds=acquisition_budget_seconds,
     )
-    session.flush()
-    return True

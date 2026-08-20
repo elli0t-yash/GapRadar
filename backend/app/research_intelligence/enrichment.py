@@ -18,7 +18,7 @@ quality gate, and the failure reporting around it.
 import logging
 import uuid
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +27,10 @@ from sqlalchemy.orm import Session
 from app.db.models import ResearchEnrichmentRun, Signal
 from app.db.models.research_enrichment_run import ACTIVE_ENRICHMENT_STATUSES
 from app.domain.enums import ResearchEnrichmentStatus, ResearchOutcomeReason
+from app.jobs.reconciliation import (
+    DEFAULT_STALE_AFTER_SECONDS,
+    reconcile_stale_runs,
+)
 from app.research_intelligence.acquisition import ResearchCollector
 from app.research_intelligence.execution import (
     RESEARCH_ACQUISITION_BUDGET_SECONDS,
@@ -34,7 +38,6 @@ from app.research_intelligence.execution import (
 )
 from app.research_intelligence.matching import SemanticMatcher
 from app.research_intelligence.orchestration import (
-    ResearchEnrichmentResult,
     enrich_opportunity_with_research,
 )
 from app.research_intelligence.query_generation import (
@@ -43,8 +46,15 @@ from app.research_intelligence.query_generation import (
     ResearchQueryGenerator,
     ResearchQueryProviderError,
 )
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
-from app.research_intelligence.service import market_context_from_signal
+from app.research_intelligence.reporting import (
+    all_searches_failed_message,
+    counters_from_result,
+    is_semantic_outage,
+    states_from_result,
+    success_reason,
+)
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
+from app.research_intelligence.service import research_subject_from_signal
 
 logger = logging.getLogger(__name__)
 
@@ -138,10 +148,18 @@ def validate_plan(plan: ResearchQueryPlan) -> None:
 
 
 def build_plan(
-    context: MarketContext, generator: ResearchQueryGenerator | None = None
+    subject: ResearchSubject, generator: ResearchQueryGenerator | None = None
 ) -> ResearchQueryPlan:
-    """Generate a plan and refuse it if it is not worth running."""
-    plan = (generator or ConceptQueryGenerator()).generate(context)
+    """Generate a plan and refuse it if it is not worth running.
+
+    Subject-agnostic: the same gate runs for a trusted market Signal and
+    for a user-supplied Investigation. The rules are deliberately
+    unchanged for the second case -- a plan built from a user's wording
+    is no more likely to be worth three provider jobs than one built from
+    a signal's, and a looser gate for investigations would just move the
+    known-worthless plans onto a different budget.
+    """
+    plan = (generator or ConceptQueryGenerator()).generate(subject)
     validate_plan(plan)
     return plan
 
@@ -166,7 +184,7 @@ class QueryGenerationProviderError(Exception):
 
 
 def build_plan_with_fallback(
-    context: MarketContext,
+    subject: ResearchSubject,
     *,
     generator: ResearchQueryGenerator | None = None,
     fallback: ResearchQueryGenerator | None = None,
@@ -186,7 +204,7 @@ def build_plan_with_fallback(
     """
     deterministic_error: Exception | None = None
     try:
-        return build_plan(context, generator)
+        return build_plan(subject, generator)
     except (ResearchPlanRejectedError, ResearchQueryGenerationError) as exc:
         # Both mean the same thing to the caller: the deterministic stage
         # has nothing specific enough to search for.
@@ -201,7 +219,7 @@ def build_plan_with_fallback(
         raise ResearchPlanUnavailableError(str(deterministic_error))
 
     try:
-        plan = fallback.generate(context)
+        plan = fallback.generate(subject)
     except ResearchQueryProviderError as exc:
         # Nothing was concluded -- the service was unreachable or its
         # answer was unreadable. Worth retrying.
@@ -357,10 +375,10 @@ def execute_enrichment(
     session.commit()
     logger.info("[research-enrichment] running id=%s", run.id)
 
-    context = market_context_from_signal(signal)
+    subject = research_subject_from_signal(signal)
     try:
         plan = build_plan_with_fallback(
-            context, generator=generator, fallback=fallback_generator
+            subject, generator=generator, fallback=fallback_generator
         )
     except ResearchPlanUnavailableError as exc:
         # Both stages declined. Deterministic input produces a
@@ -435,15 +453,15 @@ def execute_enrichment(
         return _fail(
             session,
             run,
-            _all_searches_failed_message(result),
+            all_searches_failed_message(result),
             now=now,
             reason=(
                 ResearchOutcomeReason.TIMEOUT
                 if timed_out
                 else ResearchOutcomeReason.ACQUISITION_FAILED
             ),
-            query_states=_states_from_result(result),
-            counters=_counters_from_result(result),
+            query_states=states_from_result(result),
+            counters=counters_from_result(result),
         )
 
     # -- semantic outage vs an honest zero result ----------------------
@@ -453,12 +471,8 @@ def execute_enrichment(
     # FAILURE, so that is what is tested -- never `judged < selected`,
     # which is also true of a normal run where some papers were declined
     # on their merits or trimmed by the candidate cap.
-    counters = _counters_from_result(result)
-    if (
-        result.judging_failures > 0
-        and counters["selected"] > 0
-        and counters["judged"] == 0
-    ):
+    counters = counters_from_result(result)
+    if is_semantic_outage(result, counters):
         # Papers were selected and NOTHING came back. Calling that "no
         # relevant research" would report a verdict the judge never gave.
         # Counters earned before the outage are preserved, not zeroed.
@@ -468,7 +482,7 @@ def execute_enrichment(
             "the research matcher could not be reached, so no paper was judged",
             now=now,
             reason=ResearchOutcomeReason.SEMANTIC_MATCHING_FAILED,
-            query_states=_states_from_result(result),
+            query_states=states_from_result(result),
             counters=counters,
         )
 
@@ -478,9 +492,9 @@ def execute_enrichment(
     run.error = None
     # Set alongside SUCCEEDED, never instead of it.
     run.warning = result.acquisition_warning
-    run.query_states = _states_from_result(result)
+    run.query_states = states_from_result(result)
     run.counters = counters
-    run.outcome_reason = _success_reason(result)
+    run.outcome_reason = success_reason(result)
     session.commit()
     session.refresh(run)
     logger.info(
@@ -505,7 +519,7 @@ class _FixedPlanGenerator:
     def __init__(self, plan: ResearchQueryPlan) -> None:
         self._plan = plan
 
-    def generate(self, context: MarketContext) -> ResearchQueryPlan:
+    def generate(self, subject: ResearchSubject) -> ResearchQueryPlan:
         return self._plan
 
 
@@ -535,98 +549,6 @@ def _publish_progress(
             exc_info=True,
         )
         session.rollback()
-
-
-def _counters_from_result(result: ResearchEnrichmentResult) -> dict[str, int]:
-    """The four counts that describe one run's funnel.
-
-    THE ONE PLACE any of these numbers is computed. Each comes from the
-    orchestration's own result rather than being reconstructed later,
-    because three of the four are unrecoverable once the run ends:
-    rejected verdicts are not persisted.
-
-    `discovered` is the DISTINCT paper count, never the sum of per-query
-    counts. A paper returned by two searches is one paper; summing them
-    is what produced a UI reporting 34 papers for a run whose own summary
-    said 20, and query-level counts stay in query_states for diagnostics
-    rather than feeding this.
-
-    `selected` and `judged` are kept apart on purpose. They differ
-    whenever the semantic matcher declined on some candidates -- a
-    provider failure mid-run -- and collapsing them would hide exactly
-    that.
-    """
-    return {
-        "discovered": result.candidate_paper_count,
-        "selected": result.judged_paper_count,
-        "judged": result.matches_created
-        + result.matches_updated
-        + result.matches_rejected,
-        "matched": result.matches_created + result.matches_updated,
-    }
-
-
-def _success_reason(
-    result: ResearchEnrichmentResult,
-) -> ResearchOutcomeReason | None:
-    """Why a SUCCEEDED run is worth explaining, or None if it is not.
-
-    An ordinary success with matches carries no reason: there is nothing
-    to say beyond the research itself. The two that do carry one are the
-    states the UI would otherwise have to guess at -- and would otherwise
-    render as failures.
-    """
-    if result.is_partial:
-        # Real research, built on less than the full plan. Stated, not
-        # hidden, and still a success.
-        return ResearchOutcomeReason.ACQUISITION_PARTIAL
-    if result.matches_created + result.matches_updated == 0:
-        # We looked properly and found nothing above the bar. An answer,
-        # not a failure.
-        return ResearchOutcomeReason.NO_RELEVANT_RESEARCH
-    return None
-
-
-def _states_from_result(result: ResearchEnrichmentResult) -> list[dict[str, object]]:
-    """Per-query state rebuilt from the finished orchestration result.
-
-    The final write comes from the result rather than the live executions
-    so the persisted state carries the post-ingestion paper counts, which
-    only exist once ingestion has run.
-    """
-    return [
-        {
-            "query": outcome.query,
-            "status": outcome.status.value,
-            "provider_job_id": outcome.provider_job_id,
-            "records_received": outcome.records_received,
-            "papers_returned": outcome.papers_returned,
-            "error": outcome.error,
-            "elapsed_seconds": outcome.elapsed_seconds,
-        }
-        for outcome in result.queries
-    ]
-
-
-def _all_searches_failed_message(result: ResearchEnrichmentResult) -> str:
-    """Why a run with no usable search is being failed.
-
-    Names the dominant reason so an operator can tell "the provider is
-    down" from "these queries are bad" without opening the logs.
-    """
-    total = len(result.queries)
-    timed_out = len(result.timed_out_queries)
-    if timed_out == total:
-        return (
-            f"all {total} research searches timed out before returning; "
-            "the provider jobs may still be running and this can be retried"
-        )
-    if timed_out:
-        return (
-            f"no research search returned: {timed_out} of {total} timed out and "
-            f"{total - timed_out} failed"
-        )
-    return f"all {total} research searches failed before returning any papers"
 
 
 def _fail(
@@ -670,7 +592,7 @@ def _fail(
 # abandoned. Comfortably above the bounded acquisition budget plus a
 # semantic-matching pass, so a genuinely slow run is never killed by it;
 # the only rows this catches are ones whose executor no longer exists.
-STALE_ENRICHMENT_AFTER_SECONDS = 900.0
+STALE_ENRICHMENT_AFTER_SECONDS = DEFAULT_STALE_AFTER_SECONDS
 
 
 def reconcile_stale_enrichments(
@@ -688,36 +610,22 @@ def reconcile_stale_enrichments(
     enriched again, so a stuck row is not cosmetic: it permanently
     disables the feature for that opportunity.
 
-    This is the reconciler for that, and it is deliberately the dumbest
-    one that works: age it out. It does NOT resume by provider job id --
-    that is a larger piece of work -- it just makes the row terminal so
-    the user can retry, which is the behaviour the UI needs.
+    The ageing-out itself now lives in app.jobs.reconciliation, shared
+    with investigation runs so the two cannot drift apart on what
+    "stale" means. This function keeps the enrichment-specific budget and
+    the count the callers expect.
 
     Safe to call on every status read: it only touches rows older than
     the budget, so an in-flight enrichment is never affected.
     """
-    cutoff = now() - timedelta(seconds=stale_after_seconds)
-    stale = list(
-        session.execute(
-            select(ResearchEnrichmentRun).where(
-                ResearchEnrichmentRun.status.in_(ACTIVE_STATUSES),
-                ResearchEnrichmentRun.created_at < cutoff,
-            )
-        ).scalars()
+    return len(
+        reconcile_stale_runs(
+            session,
+            model=ResearchEnrichmentRun,
+            active_statuses=ACTIVE_STATUSES,
+            failed_status=ResearchEnrichmentStatus.FAILED,
+            now=now,
+            stale_after_seconds=stale_after_seconds,
+            outcome_reason=ResearchOutcomeReason.INTERRUPTED,
+        )
     )
-    for run in stale:
-        run.status = ResearchEnrichmentStatus.FAILED
-        run.completed_at = now()
-        run.error = (
-            "the worker running this enrichment stopped before it finished "
-            "(most likely a backend restart); no provider job was cancelled, "
-            "and this can be retried"
-        )
-        logger.warning(
-            "[research-enrichment] reconciled stale run id=%s signal=%s",
-            run.id,
-            run.signal_id,
-        )
-    if stale:
-        session.commit()
-    return len(stale)

@@ -20,6 +20,7 @@ from app.domain.enums import (
     ResearchEnrichmentStatus,
     ResearchOutcomeReason,
     ResearchQueryStatus,
+    ResearchSubjectOrigin,
 )
 
 # One raw record exactly as the arXiv collector delivers it. Left as a
@@ -64,6 +65,47 @@ class ResearchCategory(BaseModel):
     label: str
 
 
+class ResearchSubject(BaseModel):
+    """WHAT the research engine is researching, whatever produced it.
+
+    The generalisation of MarketContext. Query generation, candidate
+    pre-filtering and semantic matching all need the same four facts --
+    an identity, a stated problem, an elaboration, and optionally an
+    industry -- and none of them need those facts to have come from a
+    Signal. A user-supplied investigation can supply them just as well,
+    and must be able to WITHOUT being written into `signals` first (see
+    app.db.models.investigation.Investigation).
+
+    `origin` is not decoration. It is the one thing that survives the
+    generalisation: a validated market signal and a sentence a user typed
+    are both legitimate research subjects and carry very different
+    warrant, and without a label they arrive here as the same anonymous
+    triple of strings. Anything that reports on a subject can therefore
+    say which kind it was looking at, rather than having to assume.
+
+    Pure: no ORM import, no provider import. Introduced ahead of its
+    consumers on purpose -- the research engine still takes MarketContext
+    today, and migrating it is a later, separate change. Nothing about
+    live opportunity enrichment behaviour depends on this type yet.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # Identity of whatever this subject was built from -- a Signal id or
+    # an Investigation id. Deliberately NOT called signal_id: the whole
+    # point is that it may not be one, and a name that lies about that
+    # would send someone straight to the wrong table.
+    subject_id: uuid.UUID
+    origin: ResearchSubjectOrigin
+    # The stated pain, in the words of whoever stated it.
+    problem: str
+    # The elaboration.
+    description: str
+    # Genuinely optional: a subject whose author named no industry is not
+    # given an invented one.
+    industry: str | None = None
+
+
 class MarketContext(BaseModel):
     """The market pain, as the research side needs to see it.
 
@@ -88,20 +130,43 @@ class MarketContext(BaseModel):
     # carries no industry is not given an invented one.
     industry: str | None = None
 
+    def as_research_subject(self) -> ResearchSubject:
+        """This market context, as the generic subject contract.
+
+        Total and lossless: every field of MarketContext has exactly one
+        counterpart here, `signal_id` becomes `subject_id`, and the
+        origin is fixed to SIGNAL because a MarketContext is only ever
+        built from a persisted Signal. Nothing is inferred, defaulted or
+        dropped -- if that stops being true, the conversion tests fail.
+        """
+        return ResearchSubject(
+            subject_id=self.signal_id,
+            origin=ResearchSubjectOrigin.SIGNAL,
+            problem=self.problem,
+            description=self.description,
+            industry=self.industry,
+        )
+
 
 class ResearchQueryPlan(BaseModel):
-    """The research searches one opportunity should drive, and why.
+    """The research searches one SUBJECT should drive, and why.
 
     `concepts` is the vocabulary the generator actually recognised, which
     is what makes the plan auditable: a plan whose concepts look nothing
     like the problem is a plan whose queries will retrieve the wrong
     literature, and that is visible here before a single provider run is
     paid for.
+
+    `subject_id` was `signal_id` until the research engine was
+    generalised. It is the id of the ResearchSubject the plan was built
+    for -- a Signal or an Investigation -- and it is REQUIRED, because a
+    plan that cannot say what it is a plan for cannot be attributed to
+    anything when it is persisted.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    signal_id: uuid.UUID
+    subject_id: uuid.UUID
     queries: list[str]
     concepts: list[str] = Field(default_factory=list)
     rationale: str = ""
@@ -210,6 +275,19 @@ class ResearchPaperMatch(BaseModel):
 class ResearchIntelligence(BaseModel):
     """Everything GapRadar currently knows about the research behind one pain.
 
+    SUBJECT-AGNOSTIC BY DESIGN. A frontend, a CLI or an MCP client reads
+    the same shape whether the research was found for a trusted market
+    Signal or for a user-supplied Investigation, and never has to branch
+    on which. `origin` is there for the cases that legitimately care --
+    an investigation's research is about a hypothesis nobody has
+    corroborated, and a UI may reasonably say so.
+
+    THIS IS THE INTERNAL SHAPE AND THE INVESTIGATION SURFACE'S RESPONSE.
+    The opportunity surface serialises OpportunityResearchIntelligence
+    instead, which is deliberately frozen at the keys that endpoint
+    shipped with -- so a field added here reaches new clients without
+    reaching old ones.
+
     Deliberately absent: research momentum and any composite GapRadar
     score. Neither is computed yet, and shipping a placeholder for them
     would be indistinguishable from a real value.
@@ -217,7 +295,8 @@ class ResearchIntelligence(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    signal_id: uuid.UUID
+    subject_id: uuid.UUID
+    origin: ResearchSubjectOrigin
     # Distinct queries this opportunity has actually been searched with,
     # most recently searched first. Empty means no enrichment has run.
     generated_queries: list[str] = Field(default_factory=list)
@@ -232,6 +311,68 @@ class ResearchIntelligence(BaseModel):
     # Concepts that recur across the matches, most frequent first.
     top_concepts: list[str] = Field(default_factory=list)
     top_papers: list[ResearchPaperMatch] = Field(default_factory=list)
+
+
+class OpportunityResearchIntelligence(BaseModel):
+    """The OPPORTUNITY surface's research response. A frozen wire contract.
+
+    Exists solely to stop the generic model's growth from leaking onto an
+    endpoint that shipped before that model was generic. When
+    ResearchIntelligence gained `subject_id` and `origin`, every consumer
+    of GET /opportunities/{id}/research silently started receiving two
+    fields it had never been told about -- harmless today, and exactly
+    the drift that makes a "read model" quietly become an API.
+
+    So the two are separated. This model names the keys the frontend's
+    `ResearchIntelligence` interface actually declares, and nothing else;
+    the field list is the contract and is asserted key-by-key by
+    tests/api/test_opportunity_research.py.
+
+    NOT A SECOND READ MODEL. It computes nothing, queries nothing, and
+    reorders nothing -- `from_intelligence` copies fields off the value
+    the shared engine already produced. Adding a field to the generic
+    model does NOT add it here, which is the entire point.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # Required and non-null, as it was before the generalisation: this
+    # endpoint is only ever reached for a Signal.
+    signal_id: uuid.UUID
+    generated_queries: list[str] = Field(default_factory=list)
+    paper_count: int = 0
+    matched_paper_count: int = 0
+    average_relevance_score: float | None = None
+    top_concepts: list[str] = Field(default_factory=list)
+    top_papers: list[ResearchPaperMatch] = Field(default_factory=list)
+
+    @classmethod
+    def from_intelligence(
+        cls, intelligence: "ResearchIntelligence"
+    ) -> "OpportunityResearchIntelligence":
+        """Narrow the shared read model onto this endpoint's contract.
+
+        Refuses an investigation's research outright rather than
+        rendering it with a `signal_id` that would be a lie about where
+        the research came from. Unreachable through the route, which
+        resolves the signal before asking -- so reaching it means a
+        caller wired the wrong subject, and failing loudly beats
+        publishing mislabelled provenance.
+        """
+        if intelligence.origin is not ResearchSubjectOrigin.SIGNAL:
+            raise ValueError(
+                "the opportunity research contract requires a SIGNAL subject; "
+                f"got {intelligence.origin.value}"
+            )
+        return cls(
+            signal_id=intelligence.subject_id,
+            generated_queries=list(intelligence.generated_queries),
+            paper_count=intelligence.paper_count,
+            matched_paper_count=intelligence.matched_paper_count,
+            average_relevance_score=intelligence.average_relevance_score,
+            top_concepts=list(intelligence.top_concepts),
+            top_papers=list(intelligence.top_papers),
+        )
 
 
 # -- on-demand enrichment ---------------------------------------------------

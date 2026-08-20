@@ -27,9 +27,9 @@ from app.research_intelligence.enrichment import (
     start_enrichment,
 )
 from app.research_intelligence.schemas import (
+    OpportunityResearchIntelligence,
     ResearchEnrichmentAccepted,
     ResearchEnrichmentRead,
-    ResearchIntelligence,
 )
 from app.research_intelligence.service import get_research_intelligence
 
@@ -61,10 +61,10 @@ def get_opportunity_signal(signal_id: uuid.UUID, session: DbSession) -> Opportun
     return opportunity
 
 
-@router.get("/{signal_id}/research", response_model=ResearchIntelligence)
+@router.get("/{signal_id}/research", response_model=OpportunityResearchIntelligence)
 def get_opportunity_research(
     signal_id: uuid.UUID, session: DbSession
-) -> ResearchIntelligence:
+) -> OpportunityResearchIntelligence:
     """The research GapRadar has connected to one trusted problem.
 
     READ ONLY, AND STRICTLY SO. This endpoint reads persisted rows and
@@ -85,10 +85,22 @@ def get_opportunity_research(
     opportunity is not currently trusted", deliberately without
     distinguishing them. An enriched-but-empty result is a 200 with zero
     matches, which is a different fact and reads as one.
+
+    The response is OpportunityResearchIntelligence, NOT the shared
+    ResearchIntelligence. The shared model is subject-aware and carries
+    `subject_id`/`origin`; this endpoint predates that and its consumers
+    were never told those fields would appear, so it keeps exactly the
+    keys it shipped with. New subject-aware fields belong on the
+    investigation surface.
     """
     if get_opportunity(session, signal_id=signal_id) is None:
         raise AppError(f"opportunity {signal_id} not found", status_code=404)
-    return get_research_intelligence(session, signal_id=signal_id)
+    # Narrowed onto this endpoint's frozen key set. The shared read model
+    # is subject-aware and will keep growing; this response will not grow
+    # with it, because clients of this URL were never told it would.
+    return OpportunityResearchIntelligence.from_intelligence(
+        get_research_intelligence(session, signal_id=signal_id)
+    )
 
 
 @router.post(

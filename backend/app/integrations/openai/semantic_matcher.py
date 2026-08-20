@@ -34,7 +34,7 @@ from app.integrations.openai.errors import (
     SemanticJudgeUnavailableError,
 )
 from app.research_intelligence.matching import ResearchMatchVerdict
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ you cannot tell; do not guess a number.
 
 
 def judge_prompt(
-    context: MarketContext, plan: ResearchQueryPlan, paper: ResearchPaper
+    subject: ResearchSubject, plan: ResearchQueryPlan, paper: ResearchPaper
 ) -> str:
     """The one message. Market problem first, paper second, so the paper is
     read in light of the problem rather than summarized on its own."""
@@ -162,13 +162,13 @@ def judge_prompt(
     )
     return f"""\
 MARKET PROBLEM
-{context.problem}
+{subject.problem}
 
 DESCRIPTION
-{context.description}
+{subject.description}
 
 INDUSTRY
-{context.industry or "(not stated)"}
+{subject.industry or "(not stated)"}
 
 RESEARCH CONCEPTS BEING SEARCHED FOR
 {", ".join(plan.concepts) or "(none)"}
@@ -246,12 +246,12 @@ class OpenAISemanticMatcher:
     def judge(
         self,
         *,
-        context: MarketContext,
+        subject: ResearchSubject,
         plan: ResearchQueryPlan,
         paper: ResearchPaper,
     ) -> ResearchMatchVerdict | None:
         try:
-            payload = self._request(context, plan, paper)
+            payload = self._request(subject, plan, paper)
         except SemanticJudgeTransportError as exc:
             self.transport_failures.append(paper.arxiv_id)
             logger.warning(
@@ -290,7 +290,7 @@ class OpenAISemanticMatcher:
         return verdict
 
     def _request(
-        self, context: MarketContext, plan: ResearchQueryPlan, paper: ResearchPaper
+        self, subject: ResearchSubject, plan: ResearchQueryPlan, paper: ResearchPaper
     ) -> dict[str, Any]:
         """One structured judgement. Raw provider output stops here."""
         try:
@@ -313,7 +313,7 @@ class OpenAISemanticMatcher:
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": judge_prompt(context, plan, paper),
+                        "content": judge_prompt(subject, plan, paper),
                     },
                 ],
             )

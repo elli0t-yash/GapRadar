@@ -36,7 +36,7 @@ from app.research_intelligence.orchestration import enrich_opportunity_with_rese
 from app.research_intelligence.query_generation import ConceptQueryGenerator
 from app.research_intelligence.service import (
     get_research_intelligence,
-    market_context_from_signal,
+    research_subject_from_signal,
 )
 from tests.research_intelligence.conftest import (
     arxiv_record_for,
@@ -85,8 +85,8 @@ def test_pain_to_research_intelligence_end_to_end(
     signal = make_opportunity_signal(db_session, title=CARGO_PROBLEM)
 
     # 2. Pain wording is translated into research wording.
-    context = market_context_from_signal(signal)
-    plan = ConceptQueryGenerator().generate(context)
+    subject = research_subject_from_signal(signal)
+    plan = ConceptQueryGenerator().generate(subject)
     assert len(plan.queries) == 3
     assert CARGO_PROBLEM.lower() not in plan.queries
     assert "urban freight" in plan.concepts
@@ -136,7 +136,9 @@ def test_pain_to_research_intelligence_end_to_end(
 
     # 7. The read model assembles it.
     intelligence = get_research_intelligence(db_session, signal_id=signal.id)
-    assert intelligence.signal_id == signal.id
+    # The shared read model names its subject; the endpoint below is what
+    # renders that as `signal_id` for this surface's frozen contract.
+    assert intelligence.subject_id == signal.id
     assert len(intelligence.generated_queries) == 3
     assert intelligence.paper_count == 4
     assert intelligence.matched_paper_count == len(matches)
@@ -161,7 +163,7 @@ def test_re_running_the_whole_flow_is_idempotent(
     db_session: Session, api_client: TestClient
 ) -> None:
     signal = make_opportunity_signal(db_session, title=CARGO_PROBLEM)
-    plan = ConceptQueryGenerator().generate(market_context_from_signal(signal))
+    plan = ConceptQueryGenerator().generate(research_subject_from_signal(signal))
     datasets = {
         plan.queries[0]: [SHARED],
         plan.queries[1]: [ROUTING],

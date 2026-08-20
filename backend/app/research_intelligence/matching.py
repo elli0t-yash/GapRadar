@@ -29,7 +29,7 @@ from app.research_intelligence.candidates import (
     score_paper,
 )
 from app.research_intelligence.query_generation import tokenize
-from app.research_intelligence.schemas import MarketContext, ResearchQueryPlan
+from app.research_intelligence.schemas import ResearchQueryPlan, ResearchSubject
 
 # Every research-intelligence score is 0-100, matching opportunity_score
 # on the market side so nothing has to remember which scale it is on.
@@ -158,7 +158,11 @@ class ReportsJudgingFailures(Protocol):
 
 
 class SemanticMatcher(Protocol):
-    """Judges whether one paper addresses one market pain.
+    """Judges whether one paper addresses one subject's stated pain.
+
+    The subject may be a trusted market Signal or a user-supplied
+    Investigation, and `subject.origin` says which. A matcher that wants
+    to weigh those differently can; one that does not, does not have to.
 
     Returning None means the matcher DECLINED to judge -- it could not
     reach an opinion, the provider errored, the response was unusable.
@@ -174,7 +178,7 @@ class SemanticMatcher(Protocol):
     def judge(
         self,
         *,
-        context: MarketContext,
+        subject: ResearchSubject,
         plan: ResearchQueryPlan,
         paper: ResearchPaper,
     ) -> ResearchMatchVerdict | None: ...
@@ -218,11 +222,11 @@ class ConceptOverlapMatcher:
     def judge(
         self,
         *,
-        context: MarketContext,
+        subject: ResearchSubject,
         plan: ResearchQueryPlan,
         paper: ResearchPaper,
     ) -> ResearchMatchVerdict | None:
-        tokens = context_tokens(context, plan)
+        tokens = context_tokens(subject, plan)
         score, matched = score_paper(tokens, paper)
         if score <= 0.0:
             return None
@@ -237,7 +241,7 @@ class ConceptOverlapMatcher:
             match_reason=(
                 f"Lexical overlap only: the paper's title and abstract share "
                 f"{len(matched)} term(s) with the problem "
-                f"{context.problem!r}"
+                f"{subject.problem!r}"
                 + (f" -- {', '.join(concepts[:3])}." if concepts else ".")
             ),
             technical_readiness_score=None,

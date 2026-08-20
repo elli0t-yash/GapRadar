@@ -1,13 +1,16 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import "./Navbar.css";
 
 const NAV_ITEMS = [
+  { to: "/investigate", label: "Investigate" },
   { to: "/trends", label: "Trends" },
   { to: "/reliability", label: "Reliability" },
   { to: "/saved", label: "Saved" },
 ];
 
 export function Navbar() {
+  const location = useLocation();
+
   return (
     <header className="navbar">
       <div className="navbar-inner">
@@ -22,7 +25,11 @@ export function Navbar() {
                 <NavLink
                   to={item.to}
                   className={({ isActive }) =>
-                    isActive ? "navbar-link is-active" : "navbar-link"
+                    isActive ||
+                    (item.to === "/investigate" &&
+                      location.pathname.startsWith("/investigations/"))
+                      ? "navbar-link is-active"
+                      : "navbar-link"
                   }
                 >
                   {item.label}

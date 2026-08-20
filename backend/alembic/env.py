@@ -8,6 +8,13 @@ from app.db.base import Base
 from app.db.models import (  # noqa: F401  (import registers models on Base.metadata)
     Collector,
     CollectorRun,
+    Investigation,
+    InvestigationCompetitor,
+    InvestigationDemandEvidence,
+    InvestigationResearchMatch,
+    InvestigationRun,
+    InvestigationWebSearchHit,
+    InvestigationWebSearchRun,
     OpportunityResearchMatch,
     ResearchEnrichmentRun,
     ResearchPaper,

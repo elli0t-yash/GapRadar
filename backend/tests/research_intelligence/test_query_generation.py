@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 
+from app.domain.enums import ResearchSubjectOrigin
 from app.research_intelligence.query_generation import (
     QUERIES_PER_OPPORTUNITY,
     ConceptQueryGenerator,
@@ -17,10 +18,11 @@ from app.research_intelligence.query_generation import (
     select_queries,
     tokenize,
 )
-from app.research_intelligence.schemas import MarketContext
+from app.research_intelligence.schemas import ResearchSubject
 
-CARGO = MarketContext(
-    signal_id=uuid.uuid4(),
+CARGO = ResearchSubject(
+    subject_id=uuid.uuid4(),
+    origin=ResearchSubjectOrigin.SIGNAL,
     problem="Why is booking cargo vehicles harder than passenger transport?",
     description=(
         "Consumers needing to transport single pieces of furniture cannot easily "
@@ -32,8 +34,8 @@ CARGO = MarketContext(
 )
 
 
-def generate(context: MarketContext) -> list[str]:
-    return ConceptQueryGenerator().generate(context).queries
+def generate(subject: ResearchSubject) -> list[str]:
+    return ConceptQueryGenerator().generate(subject).queries
 
 
 # -- the shape of a plan ----------------------------------------------------
@@ -56,7 +58,7 @@ def test_queries_are_distinct() -> None:
 def test_the_plan_reports_its_concepts_and_rationale() -> None:
     plan = ConceptQueryGenerator().generate(CARGO)
 
-    assert plan.signal_id == CARGO.signal_id
+    assert plan.subject_id == CARGO.subject_id
     assert plan.concepts, "a plan with no concepts is not auditable"
     assert "Logistics" in plan.rationale
 
@@ -103,8 +105,9 @@ def test_the_industry_is_represented() -> None:
 
 
 def test_two_different_problems_produce_different_queries() -> None:
-    fintech = MarketContext(
-        signal_id=uuid.uuid4(),
+    fintech = ResearchSubject(
+        subject_id=uuid.uuid4(),
+        origin=ResearchSubjectOrigin.SIGNAL,
         problem="Why do small merchants wait weeks for payment settlement?",
         description="Merchants cannot predict when card payments will settle.",
         industry="Fintech",
@@ -114,8 +117,9 @@ def test_two_different_problems_produce_different_queries() -> None:
 
 
 def test_a_context_without_an_industry_still_generates_three() -> None:
-    context = MarketContext(
-        signal_id=uuid.uuid4(),
+    context = ResearchSubject(
+        subject_id=uuid.uuid4(),
+        origin=ResearchSubjectOrigin.SIGNAL,
         problem="Scheduling delivery drivers is chaotic",
         description="Dispatch is manual and routes are planned on paper.",
         industry=None,
@@ -127,8 +131,9 @@ def test_a_context_without_an_industry_still_generates_three() -> None:
 
 
 def test_an_unmapped_industry_still_contributes_a_concept() -> None:
-    context = MarketContext(
-        signal_id=uuid.uuid4(),
+    context = ResearchSubject(
+        subject_id=uuid.uuid4(),
+        origin=ResearchSubjectOrigin.SIGNAL,
         problem="Booking equipment is slow",
         description="Operators cannot see availability.",
         industry="Aquaculture",
@@ -140,8 +145,12 @@ def test_an_unmapped_industry_still_contributes_a_concept() -> None:
 
 def test_a_context_with_no_usable_wording_is_refused() -> None:
     """Better to fail loudly than to pad the plan with a repeat."""
-    context = MarketContext(
-        signal_id=uuid.uuid4(), problem="the and of", description="is it", industry=None
+    context = ResearchSubject(
+        subject_id=uuid.uuid4(),
+        origin=ResearchSubjectOrigin.SIGNAL,
+        problem="the and of",
+        description="is it",
+        industry=None,
     )
 
     with pytest.raises(ResearchQueryGenerationError, match="no research vocabulary"):
@@ -218,8 +227,9 @@ def test_tokenize_is_case_and_punctuation_insensitive() -> None:
 
 def test_a_single_recognised_term_still_yields_three_distinct_queries() -> None:
     """A thin but usable context is padded with angles, never with repeats."""
-    context = MarketContext(
-        signal_id=uuid.uuid4(),
+    context = ResearchSubject(
+        subject_id=uuid.uuid4(),
+        origin=ResearchSubjectOrigin.SIGNAL,
         problem="Warehouse work is slow",
         description="Nothing else is known.",
         industry=None,
@@ -277,20 +287,23 @@ def test_a_well_formed_query_is_not_treated_as_degenerate(query: str) -> None:
 def test_no_generated_plan_contains_a_degenerate_query() -> None:
     """The end-to-end guarantee, over contexts that used to trigger it."""
     contexts = [
-        MarketContext(
-            signal_id=uuid.uuid4(),
+        ResearchSubject(
+            subject_id=uuid.uuid4(),
+            origin=ResearchSubjectOrigin.SIGNAL,
             problem="Why can't small restaurants access wholesale ingredient pricing?",
             description="Demand is unpredictable and capacity is wasted.",
             industry="B2B Services",
         ),
-        MarketContext(
-            signal_id=uuid.uuid4(),
+        ResearchSubject(
+            subject_id=uuid.uuid4(),
+            origin=ResearchSubjectOrigin.SIGNAL,
             problem="Why do payment apps have confusing cashback terms?",
             description="Users cannot tell what they earned.",
             industry="Payment Issues",
         ),
-        MarketContext(
-            signal_id=uuid.uuid4(),
+        ResearchSubject(
+            subject_id=uuid.uuid4(),
+            origin=ResearchSubjectOrigin.SIGNAL,
             problem="Why can't hosts prepare restaurant-quality meals quickly?",
             description="Home cooking takes too long.",
             industry="Food & Beverage",
@@ -307,8 +320,9 @@ def test_no_generated_plan_contains_a_degenerate_query() -> None:
 
 def test_a_domain_term_colliding_with_a_method_term_still_yields_three() -> None:
     """Rejecting the degenerate pairing must not cost a query."""
-    context = MarketContext(
-        signal_id=uuid.uuid4(),
+    context = ResearchSubject(
+        subject_id=uuid.uuid4(),
+        origin=ResearchSubjectOrigin.SIGNAL,
         problem="Demand planning for warehouse capacity is manual",
         description="Stock levels and demand are guessed.",
         industry=None,

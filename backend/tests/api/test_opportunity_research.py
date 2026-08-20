@@ -1,8 +1,15 @@
-"""GET /opportunities/{signal_id}/research: read-only, and trust-gated.
+"""GET /opportunities/{signal_id}/research: read-only, trust-gated, frozen.
 
 `api_client`'s provider handler raises on any Bright Data call, so a GET
 that triggered acquisition would fail these tests rather than merely be
 slow. That is the property this surface exists to guarantee.
+
+The other property, added after this endpoint's response quietly grew two
+fields when the shared read model was generalised: THE KEY SET IS PART OF
+THE CONTRACT. It is pinned below as a literal, so widening the internal
+model can no longer widen this response as a side effect. A test that
+merely compared this endpoint to another would not have caught that --
+both were wrong in the same direction.
 """
 
 import uuid
@@ -19,7 +26,7 @@ from app.research_intelligence.matching import (
 )
 from app.research_intelligence.orchestration import enrich_opportunity_with_research
 from app.research_intelligence.query_generation import ConceptQueryGenerator
-from app.research_intelligence.service import market_context_from_signal
+from app.research_intelligence.service import research_subject_from_signal
 from tests.opportunity_engine.conftest import make_signal
 from tests.opportunity_engine.test_service import open_incident
 from tests.research_intelligence.conftest import arxiv_record_for
@@ -44,7 +51,7 @@ def cargo_papers(*arxiv_ids: str) -> list[dict[str, Any]]:
 def enrich(db_session: Session, signal: Signal, *arxiv_ids: str) -> None:
     """Run enrichment directly -- never through the API, which cannot."""
     queries = (
-        ConceptQueryGenerator().generate(market_context_from_signal(signal)).queries
+        ConceptQueryGenerator().generate(research_subject_from_signal(signal)).queries
     )
     collector = SequenceResearchCollector(
         {
@@ -160,7 +167,7 @@ def test_searched_but_unmatched_is_distinguishable_from_never_searched(
 ) -> None:
     signal = cargo_signal(db_session, source, run)
     queries = (
-        ConceptQueryGenerator().generate(market_context_from_signal(signal)).queries
+        ConceptQueryGenerator().generate(research_subject_from_signal(signal)).queries
     )
     enrich_opportunity_with_research(
         db_session,
@@ -252,3 +259,109 @@ def test_the_get_never_acquires_or_matches(
         )
 
     assert counts() == before
+
+
+# -- the frozen wire contract ----------------------------------------------
+
+# Exactly the keys `ResearchIntelligence` declares in
+# frontend/src/api/types.ts. Written as a literal on purpose: deriving it
+# from the response model would make the test agree with whatever the
+# model happens to say, which is the failure being guarded against.
+OPPORTUNITY_RESEARCH_KEYS = {
+    "signal_id",
+    "generated_queries",
+    "paper_count",
+    "matched_paper_count",
+    "average_relevance_score",
+    "top_concepts",
+    "top_papers",
+}
+
+PAPER_MATCH_KEYS = {
+    "research_paper_id",
+    "arxiv_id",
+    "title",
+    "abstract",
+    "abstract_preview",
+    "authors",
+    "categories",
+    "published_at",
+    "paper_url",
+    "pdf_url",
+    "relevance_score",
+    "matched_concepts",
+    "match_reason",
+    "technical_readiness_score",
+}
+
+
+def test_the_empty_response_has_exactly_the_documented_keys(
+    api_client: TestClient, db_session: Session, source: Source, run: Any
+) -> None:
+    signal = cargo_signal(db_session, source, run)
+
+    body = api_client.get(f"/api/v1/opportunities/{signal.id}/research").json()
+
+    assert set(body) == OPPORTUNITY_RESEARCH_KEYS
+
+
+def test_the_populated_response_has_exactly_the_documented_keys(
+    api_client: TestClient, db_session: Session, source: Source, run: Any
+) -> None:
+    signal = cargo_signal(db_session, source, run)
+    enrich(db_session, signal, "2608.13083")
+
+    body = api_client.get(f"/api/v1/opportunities/{signal.id}/research").json()
+
+    assert set(body) == OPPORTUNITY_RESEARCH_KEYS
+    assert body["top_papers"]
+    for paper in body["top_papers"]:
+        assert set(paper) == PAPER_MATCH_KEYS
+
+
+def test_the_response_does_not_leak_subject_aware_fields(
+    api_client: TestClient, db_session: Session, source: Source, run: Any
+) -> None:
+    """`subject_id` and `origin` belong to the investigation surface.
+
+    They were added to the shared read model when the research engine was
+    generalised, and for a while they appeared here too -- on an endpoint
+    whose consumers were never told to expect them.
+    """
+    signal = cargo_signal(db_session, source, run)
+
+    body = api_client.get(f"/api/v1/opportunities/{signal.id}/research").json()
+
+    assert "subject_id" not in body
+    assert "origin" not in body
+
+
+def test_signal_id_is_the_signal_and_is_never_null(
+    api_client: TestClient, db_session: Session, source: Source, run: Any
+) -> None:
+    """Non-nullable, as it was before the generalisation."""
+    signal = cargo_signal(db_session, source, run)
+
+    body = api_client.get(f"/api/v1/opportunities/{signal.id}/research").json()
+
+    assert body["signal_id"] == str(signal.id)
+
+
+def test_the_openapi_schema_declares_the_same_frozen_key_set(
+    api_client: TestClient,
+) -> None:
+    """A generated client must see the contract the responses honour."""
+    spec = api_client.get("/openapi.json").json()
+    schema_name = spec["paths"]["/api/v1/opportunities/{signal_id}/research"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
+
+    schema = spec["components"]["schemas"][schema_name]
+
+    assert set(schema["properties"]) == OPPORTUNITY_RESEARCH_KEYS
+    # Required and non-null: this endpoint is only ever reached for a Signal.
+    assert schema["properties"]["signal_id"] == {
+        "type": "string",
+        "format": "uuid",
+        "title": "Signal Id",
+    }

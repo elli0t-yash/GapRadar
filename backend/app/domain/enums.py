@@ -281,3 +281,216 @@ class ReliabilityState(str, enum.Enum):
     VALIDATING = "validating"
     VERIFYING = "verifying"
     MANUAL_REVIEW = "manual_review"
+
+
+class InvestigationStatus(str, enum.Enum):
+    """Lifecycle of ONE user-supplied independent investigation, persisted.
+
+    Deliberately small, and deliberately NOT the same enum as
+    ResearchEnrichmentStatus. An enrichment is a job; an investigation is
+    a SUBJECT that a job will later be run against. Sharing one enum
+    would make "the investigation" and "the run over the investigation"
+    indistinguishable the first time an investigation is re-run.
+
+    DRAFT is the only value anything writes today: creating an
+    investigation records the user's wording and does no work, so no
+    other state can be reached honestly yet. The remaining members name
+    the lifecycle the investigation engine will drive, and exist here
+    rather than being added later so the persisted vocabulary does not
+    change underneath rows that are already on disk.
+
+    DRAFT and READY are pre-execution; RUNNING is active; SUCCEEDED and
+    FAILED are terminal.
+
+    SUCCEEDED means the investigation ran to completion -- NOT that it
+    found a viable opportunity. "We looked and there is nothing here" is
+    a successful investigation whose answer is negative.
+    """
+
+    DRAFT = "draft"
+    READY = "ready"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ResearchSubjectOrigin(str, enum.Enum):
+    """Where the thing being researched came from.
+
+    The point of this enum is PROVENANCE, and provenance here is a trust
+    statement, not a label. A SIGNAL was discovered externally and
+    survived collection, source-contract validation and RecallGuard; an
+    INVESTIGATION is a sentence a user typed. Both are legitimate inputs
+    to research, and neither may be presented as the other.
+
+    Carried on ResearchSubject so a downstream consumer can never lose
+    the distinction by accident: without it, a user hypothesis and a
+    validated market signal arrive at the research engine as the same
+    anonymous triple of strings.
+    """
+
+    SIGNAL = "signal"
+    INVESTIGATION = "investigation"
+
+
+class InvestigationRunStatus(str, enum.Enum):
+    """Lifecycle of ONE execution attempt against an investigation.
+
+    Deliberately a different enum from InvestigationStatus, because they
+    answer different questions. The Investigation is the durable subject
+    ("what is being investigated"); a run is one attempt at answering it
+    ("what happened when we tried"). Collapsing them would mean a re-run
+    overwrites the record of the previous attempt, and there would be no
+    history to point at when two runs disagree.
+
+    Deliberately a different enum from ResearchEnrichmentStatus too,
+    despite naming the same four states today. An enrichment is research
+    and only research; an investigation run will grow demand and
+    competitor phases, and its terminal vocabulary will diverge. Sharing
+    the type now would make that divergence a change to the opportunity
+    path as well.
+
+    QUEUED and RUNNING are active; SUCCEEDED and FAILED are terminal.
+
+    There is no INTERRUPTED member. A run whose executor died is FAILED
+    with ResearchOutcomeReason.INTERRUPTED -- the existing taxonomy
+    already carries "why" separately from "what", and a second axis
+    smuggled into the status would put the two in a position to disagree.
+
+    SUCCEEDED means the run completed, NOT that it found anything. An
+    investigation that searched honestly and matched no research is a
+    success whose answer is negative.
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class DemandEvidenceClassification(str, enum.Enum):
+    """What one web page says about whether a stated problem is real.
+
+    The question every verdict answers is exactly one question, and it is
+    about the INVESTIGATION, not about the page:
+
+        "Does this source provide evidence that the problem this
+         investigation describes is actually experienced?"
+
+    Not a score, and deliberately not convertible into one yet. A demand
+    score would have to weigh source quality, recency, independence and
+    volume, and GapRadar measures none of those; publishing a number
+    derived from five classifications would be a confidence it has not
+    earned.
+
+    CONTRADICTS is not the absence of support. A page saying the problem
+    is already solved, or does not occur, is real evidence pointing the
+    other way, and collapsing it into IRRELEVANT would quietly delete the
+    only findings that could change a founder's mind.
+
+    IRRELEVANT means the page is not about this problem at all. NEUTRAL
+    means it IS about it and takes no position.
+    """
+
+    STRONG_SUPPORT = "strong_support"
+    SUPPORT = "support"
+    NEUTRAL = "neutral"
+    CONTRADICTS = "contradicts"
+    IRRELEVANT = "irrelevant"
+
+    @property
+    def is_supporting(self) -> bool:
+        """Whether this verdict is evidence FOR the problem existing."""
+        return self in _SUPPORTING_DEMAND_CLASSIFICATIONS
+
+    @property
+    def is_accepted(self) -> bool:
+        """Whether this verdict is worth keeping as evidence at all.
+
+        Everything except IRRELEVANT. A neutral or contradicting page is
+        still a finding; a page about something else is noise.
+        """
+        return self is not DemandEvidenceClassification.IRRELEVANT
+
+
+_SUPPORTING_DEMAND_CLASSIFICATIONS = frozenset(
+    {
+        DemandEvidenceClassification.STRONG_SUPPORT,
+        DemandEvidenceClassification.SUPPORT,
+    }
+)
+
+
+class CompetitorClassification(str, enum.Enum):
+    """How one discovered product relates to the investigated idea.
+
+    DIRECT: solves the same problem for the same kind of buyer.
+    ADJACENT: solves a neighbouring problem, or the same problem for a
+        different buyer -- a plausible entrant, not a current rival.
+    SUBSTITUTE: not a product in this category at all, but what people
+        use instead today (a spreadsheet, an agency, a manual process).
+        Kept as its own member because "the competitor is Excel" is the
+        single most common true answer and the one a category-shaped
+        taxonomy loses.
+    IRRELEVANT: not a solution to anything the investigation is about.
+    """
+
+    DIRECT = "direct"
+    ADJACENT = "adjacent"
+    SUBSTITUTE = "substitute"
+    IRRELEVANT = "irrelevant"
+
+    @property
+    def is_accepted(self) -> bool:
+        return self is not CompetitorClassification.IRRELEVANT
+
+
+class InvestigationPhase(str, enum.Enum):
+    """The stages one investigation run passes through.
+
+    Named so progress can be reported per phase instead of as one opaque
+    percentage. Phase 3 implements exactly these four; whitespace and the
+    commercial verdict are deliberately absent, because a phase that
+    reports 0/0 for work nobody wrote is indistinguishable from a phase
+    that ran and found nothing.
+    """
+
+    PLANNING = "planning"
+    RESEARCH = "research"
+    DEMAND = "demand"
+    COMPETITORS = "competitors"
+
+
+class PhaseState(str, enum.Enum):
+    """Where one phase of a run has got to.
+
+    SKIPPED is distinct from COMPLETE and from FAILED: a phase that never
+    ran because its provider was not configured has produced no evidence
+    and no failure, and reporting it as either would be a lie in one
+    direction or the other.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class WebSearchStatus(str, enum.Enum):
+    """How ONE web search execution ended.
+
+    SUCCEEDED with zero records is a real answer: the engine looked and
+    found nothing. FAILED means nothing was learned. TIMED_OUT is kept
+    apart from FAILED because the request may well have been served and
+    billed on the provider's side while GapRadar stopped waiting -- an
+    operator needs to tell "we gave up" from "it was refused".
+
+    This distinction is the entire reason the enum exists. Without it a
+    broken provider and an unserved market look identical in the data.
+    """
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"

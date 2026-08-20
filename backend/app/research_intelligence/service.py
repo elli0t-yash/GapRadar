@@ -26,13 +26,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    InvestigationResearchMatch,
     OpportunityResearchMatch,
     ResearchPaper,
     ResearchSearchResult,
     ResearchSearchRun,
     Signal,
 )
-from app.domain.enums import ResearchSource
+from app.domain.enums import ResearchSource, ResearchSubjectOrigin
 from app.opportunity_engine.schemas import Opportunity
 from app.research_intelligence.normalizer import (
     ResearchRecordRejectedError,
@@ -46,6 +47,7 @@ from app.research_intelligence.schemas import (
     ResearchIngestionResult,
     ResearchIntelligence,
     ResearchPaperMatch,
+    ResearchSubject,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ def ingest_arxiv_search_results(
     query: str,
     records: Sequence[RawResearchRecord],
     signal_id: uuid.UUID | None = None,
+    investigation_id: uuid.UUID | None = None,
     searched_at: datetime | None = None,
     provider_job_id: str | None = None,
     source: ResearchSource = ResearchSource.ARXIV,
@@ -79,9 +82,18 @@ def ingest_arxiv_search_results(
             would silently mislabel every future dynamic query.
         records: raw records in the arXiv collector's output shape. Order
             is preserved as the search ranking.
-        signal_id: the Signal behind the Opportunity that motivated this
-            search, if there was one. None for an exploratory or operator
-            search -- recorded honestly rather than refused.
+        signal_id / investigation_id: the subject that motivated this
+            search. EXACTLY ONE is required -- passing both, or neither,
+            raises. A search is run for one subject: a row naming two
+            makes "which problem was this searched for" unanswerable, and
+            a row naming none is a provider call no read model can ever
+            surface and no operator can explain. The table's CHECK
+            enforces the same rule independently, because this function
+            is not the only writer the schema will outlive.
+
+            Use app.research_intelligence.persistence
+            .search_run_attribution to derive the pair from a
+            ResearchSubject rather than passing them by hand.
         searched_at: when the provider actually ran the search. Defaults
             to now, which is right when ingestion follows acquisition
             immediately and wrong when a batch is replayed from a file,
@@ -95,8 +107,15 @@ def ingest_arxiv_search_results(
     A record that fails validation is reported in `rejected` and skipped;
     it never aborts the batch and never becomes a partial paper.
     """
+    if (signal_id is None) == (investigation_id is None):
+        raise ValueError(
+            "a research search belongs to exactly one subject: pass "
+            "signal_id or investigation_id, never both and never neither"
+        )
+
     search_run = ResearchSearchRun(
         signal_id=signal_id,
+        investigation_id=investigation_id,
         source=source,
         query=query,
         searched_at=searched_at or _utcnow(),
@@ -159,6 +178,7 @@ def ingest_arxiv_search_results(
         extra={
             "search_run_id": str(search_run.id),
             "signal_id": str(signal_id) if signal_id else None,
+            "investigation_id": str(investigation_id) if investigation_id else None,
             "query": query,
             # Prefixed: a bare "created" collides with LogRecord.created.
             "papers_created": created,
@@ -298,6 +318,16 @@ def market_context_from_signal(signal: Signal) -> MarketContext:
     )
 
 
+def research_subject_from_signal(signal: Signal) -> ResearchSubject:
+    """One trusted market pain, as the research engine's generic subject.
+
+    Routed through MarketContext rather than reading the Signal directly,
+    so there is still exactly ONE reading of a signal's wording and the
+    Opportunity read model stays the authority on it.
+    """
+    return market_context_from_signal(signal).as_research_subject()
+
+
 # -- read model -------------------------------------------------------------
 
 # Characters of abstract shown in a card-sized preview, cut back to a
@@ -315,26 +345,52 @@ def abstract_preview(abstract: str, *, limit: int = ABSTRACT_PREVIEW_CHARS) -> s
     return f"{cut}\u2026"
 
 
-def get_research_intelligence(
+# The two subject kinds, each named by the columns their research hangs
+# off. Kept in ONE table so a third subject kind is a line here rather
+# than a fourth branch scattered through the read model.
+_SUBJECT_READ_MODEL: dict[
+    ResearchSubjectOrigin,
+    tuple[type[OpportunityResearchMatch] | type[InvestigationResearchMatch], str],
+] = {
+    ResearchSubjectOrigin.SIGNAL: (OpportunityResearchMatch, "signal_id"),
+    ResearchSubjectOrigin.INVESTIGATION: (
+        InvestigationResearchMatch,
+        "investigation_id",
+    ),
+}
+
+
+def get_subject_research_intelligence(
     session: Session,
     *,
-    signal_id: uuid.UUID,
+    subject_id: uuid.UUID,
+    origin: ResearchSubjectOrigin,
     top_papers: int = DEFAULT_TOP_PAPERS,
 ) -> ResearchIntelligence:
-    """Everything persisted about the research behind one opportunity.
+    """Everything persisted about the research behind one subject.
 
-    READ ONLY. It never searches, never judges, and never contacts a
-    provider -- an opportunity that has not been enriched returns an
-    empty-but-valid result rather than triggering work on read.
+    READ ONLY, AND STRICTLY SO. It never searches, never judges, and
+    never contacts a provider -- a subject that has not been researched
+    returns an empty-but-valid result rather than triggering work on
+    read. That property is what makes it safe to poll and safe to call on
+    every page load.
 
-    Trust is NOT decided here. The caller establishes that the
-    opportunity is visible before asking, exactly as the Discover feed
-    does; this function answers about whatever signal id it is given.
+    Works identically for a market Signal and a user-supplied
+    Investigation. Only the two columns the data hangs off differ, and
+    those come from `origin`; there is no second copy of this query.
+
+    Trust is NOT decided here. The caller establishes that the subject is
+    visible before asking, exactly as the Discover feed does; this
+    function answers about whatever subject it is given.
     """
+    match_model, subject_column_name = _SUBJECT_READ_MODEL[origin]
+    match_subject_column = getattr(match_model, subject_column_name)
+    search_subject_column = getattr(ResearchSearchRun, subject_column_name)
+
     runs = list(
         session.execute(
             select(ResearchSearchRun)
-            .where(ResearchSearchRun.signal_id == signal_id)
+            .where(search_subject_column == subject_id)
             .order_by(ResearchSearchRun.searched_at.desc())
         ).scalars()
     )
@@ -351,21 +407,21 @@ def get_research_intelligence(
                 ResearchSearchRun,
                 ResearchSearchResult.research_search_run_id == ResearchSearchRun.id,
             )
-            .where(ResearchSearchRun.signal_id == signal_id)
+            .where(search_subject_column == subject_id)
         ).scalar_one()
         or 0
     )
 
     matches = list(
         session.execute(
-            select(OpportunityResearchMatch, ResearchPaper)
+            select(match_model, ResearchPaper)
             .join(
                 ResearchPaper,
-                OpportunityResearchMatch.research_paper_id == ResearchPaper.id,
+                match_model.research_paper_id == ResearchPaper.id,
             )
-            .where(OpportunityResearchMatch.signal_id == signal_id)
+            .where(match_subject_column == subject_id)
             .order_by(
-                OpportunityResearchMatch.relevance_score.desc(),
+                match_model.relevance_score.desc(),
                 ResearchPaper.arxiv_id,
             )
         )
@@ -378,7 +434,8 @@ def get_research_intelligence(
     )
 
     return ResearchIntelligence(
-        signal_id=signal_id,
+        subject_id=subject_id,
+        origin=origin,
         generated_queries=queries,
         paper_count=paper_count,
         matched_paper_count=len(matches),
@@ -390,8 +447,29 @@ def get_research_intelligence(
     )
 
 
+def get_research_intelligence(
+    session: Session,
+    *,
+    signal_id: uuid.UUID,
+    top_papers: int = DEFAULT_TOP_PAPERS,
+) -> ResearchIntelligence:
+    """The opportunity surface's view. A thin alias, not a second query.
+
+    Kept because "the research behind this signal" is what the
+    opportunity routes ask for, and spelling the origin at every call
+    site would invite one of them to spell it wrong.
+    """
+    return get_subject_research_intelligence(
+        session,
+        subject_id=signal_id,
+        origin=ResearchSubjectOrigin.SIGNAL,
+        top_papers=top_papers,
+    )
+
+
 def _paper_match(
-    match: OpportunityResearchMatch, paper: ResearchPaper
+    match: OpportunityResearchMatch | InvestigationResearchMatch,
+    paper: ResearchPaper,
 ) -> ResearchPaperMatch:
     return ResearchPaperMatch(
         research_paper_id=paper.id,
@@ -412,7 +490,9 @@ def _paper_match(
 
 
 def _top_concepts(
-    matches: Iterable[OpportunityResearchMatch], *, limit: int = 8
+    matches: Iterable[OpportunityResearchMatch | InvestigationResearchMatch],
+    *,
+    limit: int = 8,
 ) -> list[str]:
     """Concepts ordered by how many matches mention them.
 

@@ -104,7 +104,7 @@ def matcher_for(wire: Wire) -> OpenAISemanticMatcher:
 
 
 def judge(wire: Wire) -> ResearchMatchVerdict | None:
-    return matcher_for(wire).judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    return matcher_for(wire).judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
 
 # -- construction -----------------------------------------------------------
@@ -118,7 +118,7 @@ def test_without_a_key_the_matcher_refuses_to_be_built() -> None:
 
 def test_the_configured_model_and_reasoning_effort_are_used() -> None:
     wire = Wire()
-    matcher_for(wire).judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher_for(wire).judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     body = wire.requests[0]
     assert body["model"] == "gpt-5-mini"
@@ -128,7 +128,7 @@ def test_the_configured_model_and_reasoning_effort_are_used() -> None:
 def test_reasoning_model_parameters_are_respected() -> None:
     """gpt-5-mini rejects `max_tokens` and a non-default `temperature`."""
     wire = Wire()
-    matcher_for(wire).judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher_for(wire).judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     body = wire.requests[0]
     assert "max_completion_tokens" in body
@@ -139,7 +139,7 @@ def test_reasoning_model_parameters_are_respected() -> None:
 def test_a_strict_json_schema_is_requested() -> None:
     """Structured output, so the adapter never parses prose."""
     wire = Wire()
-    matcher_for(wire).judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher_for(wire).judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     fmt = wire.requests[0]["response_format"]
     assert fmt["type"] == "json_schema"
@@ -184,7 +184,7 @@ def test_the_prompt_carries_the_problem_the_paper_and_the_concepts() -> None:
 
 def test_the_system_prompt_forbids_word_matching_and_industry_matching() -> None:
     wire = Wire()
-    matcher_for(wire).judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher_for(wire).judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     system = wire.requests[0]["messages"][0]["content"]
     assert "same words" in system
@@ -276,8 +276,8 @@ def test_concepts_are_normalized_by_the_verdict() -> None:
 
 def test_token_usage_is_accumulated_for_cost_reporting() -> None:
     matcher = matcher_for(Wire())
-    matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
-    matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert matcher.prompt_tokens == 2400
     assert matcher.completion_tokens == 600
@@ -293,7 +293,7 @@ def test_a_provider_failure_declines_rather_than_scoring_zero(status: int) -> No
     wire = Wire(status=status)
     matcher = matcher_for(wire)
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.failures == 1
     assert matcher.transport_failures == [RELEVANT.arxiv_id]
 
@@ -302,21 +302,21 @@ def test_a_quota_or_billing_failure_declines_and_is_reported() -> None:
     """429 insufficient_quota must not look like an irrelevant paper."""
     matcher = matcher_for(Wire(status=429))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.transport_failures == [RELEVANT.arxiv_id]
 
 
 def test_a_timeout_declines() -> None:
     matcher = matcher_for(Wire(raises=httpx2.TimeoutException("too slow")))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.transport_failures == [RELEVANT.arxiv_id]
 
 
 def test_a_connection_error_declines() -> None:
     matcher = matcher_for(Wire(raises=httpx2.ConnectError("no route")))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.failures == 1
 
 
@@ -335,7 +335,7 @@ def test_malformed_output_is_a_matcher_failure_not_a_zero(body: str) -> None:
     """The rule that keeps a broken judge from condemning good research."""
     matcher = matcher_for(Wire(text=body))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.failures == 1
 
 
@@ -343,40 +343,40 @@ def test_a_truncated_response_declines() -> None:
     """Reasoning tokens can exhaust the ceiling before the answer lands."""
     matcher = matcher_for(Wire(finish_reason="length"))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.response_failures == [RELEVANT.arxiv_id]
 
 
 def test_a_refusal_declines() -> None:
     matcher = matcher_for(Wire(refusal="I cannot help with that."))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.response_failures == [RELEVANT.arxiv_id]
 
 
 def test_a_content_filter_declines() -> None:
     matcher = matcher_for(Wire(finish_reason="content_filter"))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
     assert matcher.failures == 1
 
 
 def test_an_empty_response_declines() -> None:
     matcher = matcher_for(Wire(text=""))
 
-    assert matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT) is None
+    assert matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT) is None
 
 
 def test_no_api_key_appears_in_any_failure_message() -> None:
     matcher = matcher_for(Wire(status=401))
-    matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert all("test-key-do-not-log" not in f for f in matcher.transport_failures)
 
 
 def test_a_successful_judgement_is_counted() -> None:
     matcher = matcher_for(Wire())
-    matcher.judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    matcher.judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert matcher.judged == 1
     assert matcher.failures == 0

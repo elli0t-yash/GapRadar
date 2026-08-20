@@ -143,7 +143,7 @@ def test_a_threshold_outside_the_score_band_is_refused() -> None:
 
 
 def test_the_stand_in_judges_a_relevant_paper() -> None:
-    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    result = ConceptOverlapMatcher().judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
     assert 0.0 < result.relevance_score <= 100.0
@@ -154,14 +154,14 @@ def test_the_stand_in_judges_a_relevant_paper() -> None:
 def test_the_stand_in_declines_rather_than_scoring_an_unrelated_paper() -> None:
     """Declining is not the same as judging irrelevant, and is not persisted."""
     assert (
-        ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=UNRELATED)
+        ConceptOverlapMatcher().judge(subject=CONTEXT, plan=PLAN, paper=UNRELATED)
         is None
     )
 
 
 def test_the_stand_in_never_invents_a_readiness_score() -> None:
     """Word counts are not evidence about how buildable research is."""
-    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    result = ConceptOverlapMatcher().judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
     assert result.technical_readiness_score is None
@@ -172,7 +172,7 @@ def test_the_stand_in_reports_overlap_as_measured() -> None:
     from app.research_intelligence.candidates import context_tokens, score_paper
 
     expected, _ = score_paper(context_tokens(CONTEXT, PLAN), RELEVANT)
-    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    result = ConceptOverlapMatcher().judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
     assert result.relevance_score == expected
@@ -193,7 +193,7 @@ def test_lexical_scores_stay_differentiated_and_never_saturate() -> None:
     papers = [RELEVANT, MODERATE, TANGENTIAL]
     scores = []
     for paper in papers:
-        verdict = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=paper)
+        verdict = ConceptOverlapMatcher().judge(subject=CONTEXT, plan=PLAN, paper=paper)
         assert verdict is not None
         assert verdict.relevance_score == score_paper(tokens, paper)[0]
         scores.append(verdict.relevance_score)
@@ -205,14 +205,14 @@ def test_lexical_scores_stay_differentiated_and_never_saturate() -> None:
 
 def test_the_lexical_matcher_does_not_pretend_to_clear_the_threshold() -> None:
     """Honest consequence: shared words are weak evidence of relevance."""
-    verdict = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    verdict = ConceptOverlapMatcher().judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert verdict is not None
     assert verdict.relevance_score < DEFAULT_RELEVANCE_THRESHOLD
 
 
 def test_the_stand_in_reports_plan_concepts_rather_than_bare_tokens() -> None:
-    result = ConceptOverlapMatcher().judge(context=CONTEXT, plan=PLAN, paper=RELEVANT)
+    result = ConceptOverlapMatcher().judge(subject=CONTEXT, plan=PLAN, paper=RELEVANT)
 
     assert result is not None
     assert "urban freight" in result.matched_concepts
