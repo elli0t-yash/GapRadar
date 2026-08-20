@@ -2,7 +2,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  background: #ffffff;
+  background: var(--bg-raised);
   border-bottom: 1px solid var(--border);
 }
 
@@ -58,6 +58,13 @@
   background: var(--accent-bg);
 }
 
+.navbar-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .navbar-cta {
   flex-shrink: 0;
   border: none;
@@ -66,7 +73,7 @@
   padding: var(--space-2) var(--space-4);
   font-size: var(--fs-sm);
   font-weight: 700;
-  color: #ffffff;
+  color: var(--on-accent);
   text-decoration: none;
   box-shadow: var(--shadow-sm);
   transition:
@@ -77,13 +84,17 @@
 
 .navbar-cta:hover {
   filter: brightness(1.08);
-  box-shadow: 0 8px 16px -4px rgba(240, 78, 0, 0.4);
+  box-shadow: var(--accent-glow);
   transform: translateY(-1px);
 }
 
 @media (max-width: 640px) {
   .navbar-inner {
     flex-wrap: wrap;
+    /* The toggle joins the CTA on the top row; tighten the gap and the CTA
+       padding so the pair still fits beside the wordmark on a small phone
+       instead of pushing itself onto a third row. */
+    column-gap: var(--space-2);
     row-gap: var(--space-2);
   }
 
@@ -98,8 +109,12 @@
     gap: var(--space-1);
   }
 
-  .navbar-cta {
+  .navbar-actions {
     order: 2;
+  }
+
+  .navbar-cta {
+    padding: var(--space-2) var(--space-3);
     text-align: center;
   }
 }

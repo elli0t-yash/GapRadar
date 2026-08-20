@@ -45,11 +45,11 @@
   white-space: nowrap;
 }
 
-.ip-phase.is-complete .ip-mark { color: #2f8f5b; }
+.ip-phase.is-complete .ip-mark { color: var(--ok-strong); }
 .ip-phase.is-complete .ip-state {
-  background: rgba(47, 143, 91, 0.1);
-  border-color: rgba(47, 143, 91, 0.28);
-  color: #226d44;
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+  color: var(--ok-text);
 }
 
 .ip-phase.is-running .ip-mark { color: var(--accent); }
@@ -60,20 +60,20 @@
 }
 
 /* PARTIAL IS A WARNING, NOT A FAILURE. It carries real results. */
-.ip-phase.is-partial { border-color: rgba(200, 130, 0, 0.35); }
-.ip-phase.is-partial .ip-mark { color: #b57400; }
+.ip-phase.is-partial { border-color: var(--warn-border); }
+.ip-phase.is-partial .ip-mark { color: var(--warn-strong); }
 .ip-phase.is-partial .ip-state {
-  background: rgba(200, 130, 0, 0.1);
-  border-color: rgba(200, 130, 0, 0.3);
-  color: #8f5c00;
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn-text);
 }
 
-.ip-phase.is-failed { border-color: rgba(179, 47, 47, 0.3); }
-.ip-phase.is-failed .ip-mark { color: #b32f2f; }
+.ip-phase.is-failed { border-color: var(--danger-border); }
+.ip-phase.is-failed .ip-mark { color: var(--danger-strong); }
 .ip-phase.is-failed .ip-state {
-  background: rgba(179, 47, 47, 0.08);
-  border-color: rgba(179, 47, 47, 0.26);
-  color: #922727;
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
 }
 
 .ip-phase.is-skipped { opacity: 0.72; }

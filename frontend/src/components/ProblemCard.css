@@ -87,12 +87,12 @@
 }
 
 .problem-card-signal.is-hot {
-  color: #ffffff;
+  color: var(--on-accent);
   background: linear-gradient(135deg, var(--accent-2), var(--accent));
 }
 
 .problem-card-signal.is-hot svg {
-  color: #ffffff;
+  color: var(--on-accent);
 }
 
 .problem-card-title {

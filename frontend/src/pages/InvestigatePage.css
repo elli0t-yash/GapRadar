@@ -4,7 +4,7 @@
   background-color: var(--bg);
   background-image: radial-gradient(
     circle,
-    rgba(255, 106, 0, 0.07) 1px,
+    var(--dot-grid) 1px,
     transparent 1.2px
   );
   background-size: 24px 24px;
@@ -95,10 +95,10 @@
 .investigate-field textarea,
 .investigate-field input {
   width: 100%;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--field-border);
   border-radius: var(--radius-md);
-  background: var(--bg);
-  color: var(--text-h);
+  background: var(--field-bg);
+  color: var(--field-text);
   font: inherit;
   font-weight: 500;
   line-height: 1.5;
@@ -116,16 +116,16 @@
 
 .investigate-field textarea::placeholder,
 .investigate-field input::placeholder {
-  color: var(--text-muted);
+  color: var(--field-placeholder);
 }
 
 .investigate-field textarea[aria-invalid="true"] {
-  border-color: #b32f2f;
+  border-color: var(--danger-strong);
 }
 
 .investigate-field-error,
 .investigate-form-error {
-  color: #922727;
+  color: var(--danger-text);
   font-size: var(--fs-sm);
 }
 
@@ -140,9 +140,9 @@
 
 .investigate-form-error {
   padding: 10px 12px;
-  border: 1px solid rgba(179, 47, 47, 0.26);
+  border: 1px solid var(--danger-border);
   border-radius: var(--radius-sm);
-  background: rgba(179, 47, 47, 0.08);
+  background: var(--danger-bg);
 }
 
 .investigate-form-footer {
@@ -165,7 +165,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 700;
   cursor: pointer;
 }
