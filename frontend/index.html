@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -11,6 +12,39 @@
       rel="stylesheet"
     />
     <title>GapRadar</title>
+    <!--
+      Resolve the theme before the first paint: stored choice wins, otherwise
+      the system preference. Runs ahead of the module bundle so a dark-mode
+      visitor never sees a flash of the cream light theme.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("gapradar-theme");
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia &&
+                  window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
+    <!-- Page ground colour, inline, so it is painted before index.css lands. -->
+    <style>
+      html {
+        background: #fffaf5;
+        color-scheme: light;
+      }
+      html[data-theme="dark"] {
+        background: #131010;
+        color-scheme: dark;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

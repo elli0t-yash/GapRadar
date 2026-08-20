@@ -13,10 +13,10 @@
   z-index: 25;
   justify-content: center;
   padding: 24px;
-  background-color: #fffaf5;
+  background-color: var(--bg);
   background-image: radial-gradient(
     circle,
-    rgba(244, 80, 46, 0.08) 1px,
+    var(--dot-grid) 1px,
     transparent 1.2px
   );
   background-size: 22px 22px;
@@ -32,7 +32,7 @@
 .docking-heading-title {
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
-  color: #201a15;
+  color: var(--text-h);
 }
 
 .docking-heading-line {
@@ -64,7 +64,7 @@
 }
 
 .docking-heading-accent {
-  color: #f4502e;
+  color: var(--flame);
   font-style: normal;
 }
 
@@ -75,7 +75,7 @@
 .docking-heading-subtitle {
   margin: 16px 0 0;
   font-size: 15.5px;
-  color: #6b5f52;
+  color: var(--text);
   max-width: 520px;
   text-align: center;
   opacity: 1;

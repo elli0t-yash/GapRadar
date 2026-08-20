@@ -78,7 +78,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 700;
   cursor: pointer;
 }
@@ -120,15 +120,15 @@
 }
 
 .investigation-notice.is-warning {
-  border: 1px solid rgba(200, 130, 0, 0.3);
-  background: rgba(200, 130, 0, 0.08);
-  color: #8f5c00;
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn-text);
 }
 
 .investigation-notice.is-error {
-  border: 1px solid rgba(179, 47, 47, 0.26);
-  background: rgba(179, 47, 47, 0.08);
-  color: #922727;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
 }
 
 .investigation-retry {
@@ -162,11 +162,11 @@
 }
 
 .investigation-surface-list strong.is-loaded {
-  color: #226d44;
+  color: var(--ok-text);
 }
 
 .investigation-surface-list strong.is-failed {
-  color: #922727;
+  color: var(--danger-text);
 }
 
 .investigation-results-status > .investigation-notice {
@@ -192,7 +192,7 @@
 }
 
 .investigation-result-state.is-error {
-  border-color: rgba(179, 47, 47, 0.26);
+  border-color: var(--danger-border);
 }
 
 .investigation-result-state-label {
@@ -215,7 +215,7 @@
 }
 
 .investigation-result-state.is-error > p:last-child {
-  color: #922727;
+  color: var(--danger-text);
 }
 
 @media (max-width: 680px) {

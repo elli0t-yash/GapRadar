@@ -1,6 +1,6 @@
 .scraping-intro {
-  --intro-accent: #f4502e;
-  --intro-bg: #fffaf5;
+  --intro-accent: var(--flame);
+  --intro-bg: var(--bg);
 
   position: fixed;
   inset: 0;
@@ -13,7 +13,10 @@
   padding: 48px 24px;
   overflow: auto;
   background-color: var(--intro-bg);
-  background-image: radial-gradient(rgba(58, 30, 0, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(
+    var(--dot-grid-neutral) 1px,
+    transparent 1px
+  );
   background-size: 20px 20px;
   opacity: 1;
   transition: opacity 600ms ease;
@@ -29,7 +32,7 @@
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #6b5645;
+  color: var(--intro-caption);
   letter-spacing: 0.01em;
   text-align: center;
   opacity: 0;
@@ -117,8 +120,8 @@
   min-height: 132px;
   padding: 16px 18px;
   border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 6px 16px rgba(58, 30, 0, 0.08);
+  background: var(--intro-card-bg);
+  box-shadow: var(--intro-card-shadow);
   border: 2px solid transparent;
   text-align: left;
   opacity: 0;
@@ -147,8 +150,8 @@
 .listing-card-tag {
   font-size: 11.5px;
   font-weight: 700;
-  color: #8a5a44;
-  background: #f7ede4;
+  color: var(--intro-tag-text);
+  background: var(--intro-tag-bg);
   padding: 3px 9px;
   border-radius: 999px;
   white-space: nowrap;
@@ -161,7 +164,7 @@
   font-size: 14.5px;
   font-weight: 700;
   line-height: 1.4;
-  color: #3a1e00;
+  color: var(--intro-card-text);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -173,6 +176,10 @@
   min-height: 190px;
   flex: 0 0 auto;
   padding: 20px 22px;
+  /* The FLIP move drives this via inline transform; promoting it to its own
+     layer up front keeps that 800ms animation compositor-only instead of
+     falling back to main-thread paint on the first frame. */
+  will-change: transform;
 }
 
 .listing-card.is-settled .listing-card-tag {
@@ -194,7 +201,7 @@
   transform: scale(0.82);
 }
 
-.listing-card.is-settled.is-kept {
+.listing-card.is-kept-highlight {
   border-color: var(--intro-accent);
   box-shadow:
     0 0 0 4px rgba(244, 80, 46, 0.16),
@@ -210,8 +217,8 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  color: #fff;
-  background: #8a7a6e;
+  color: var(--invert-text);
+  background: var(--intro-badge-bg);
   opacity: 0;
   transform: translateY(-4px);
   transition:
@@ -252,7 +259,7 @@
   color: var(--intro-accent);
 }
 
-.listing-card.is-settled.is-kept:nth-child(odd) {
+.listing-card.is-kept-highlight:nth-child(odd) {
   border-color: #fff;
   box-shadow:
     0 0 0 4px rgba(255, 255, 255, 0.35),
@@ -294,6 +301,23 @@
   .scraping-intro-caption {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* Laptop viewports (roughly 901-1440px): the settled cards at their full
+   260px size read oversized against the smaller grid cells they flew in
+   from, exaggerating the FLIP scale jump. Shrinking them here keeps the
+   before/after size delta -- and the resulting stretch -- modest. */
+@media (max-width: 1440px) and (min-width: 901px) {
+  .listing-card.is-settled {
+    width: 208px;
+    min-height: 158px;
+    padding: 16px 18px;
+  }
+
+  .listing-card.is-settled .listing-card-title {
+    font-size: 15px;
+    -webkit-line-clamp: 4;
   }
 }
 

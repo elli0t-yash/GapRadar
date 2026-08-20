@@ -241,6 +241,13 @@ export function ScrapingIntro({ onDone }: { onDone?: () => void }) {
         {visibleListings.map((listing, i) => {
           const isKept = keptIds.has(listing.id);
           const isRejected = phase === "filtering" && !isKept;
+          // Deliberately withheld until the FLIP move (arranging) has
+          // finished: the highlight's box-shadow/border-color transition is
+          // a paint cost, and firing it while the transform is still
+          // animating competes with that animation for frame budget and
+          // reads as jank. Waiting for "label" keeps the move
+          // compositor-only, then layers the highlight in as its own step.
+          const showKeptHighlight = isKept && labelVisible;
 
           return (
             <div
@@ -251,7 +258,9 @@ export function ScrapingIntro({ onDone }: { onDone?: () => void }) {
               }}
               className={`listing-card${isKept ? " is-kept" : ""}${
                 isRejected ? " is-rejected" : ""
-              }${isRowLayout ? " is-settled" : ""}`}
+              }${isRowLayout ? " is-settled" : ""}${
+                showKeptHighlight ? " is-kept-highlight" : ""
+              }`}
               style={
                 phase === "grid"
                   ? { animationDelay: `${i * POP_STAGGER_MS}ms` }

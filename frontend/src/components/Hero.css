@@ -1,9 +1,9 @@
 .hero {
   position: relative;
-  background-color: #fffaf5;
+  background-color: var(--bg);
   background-image: radial-gradient(
     circle,
-    rgba(244, 80, 46, 0.08) 1px,
+    var(--dot-grid) 1px,
     transparent 1.2px
   );
   background-size: 22px 22px;
@@ -67,6 +67,12 @@
   color: var(--text-h);
 }
 
+/* The pill itself rings via .hero-search:focus-within -- suppress the
+   global :focus-visible ring here so the input doesn't get a second one. */
+.hero-search input:focus-visible {
+  box-shadow: none;
+}
+
 .hero-search input::placeholder {
   color: var(--text-muted);
 }
@@ -75,7 +81,7 @@
   flex-shrink: 0;
   border: none;
   background: linear-gradient(135deg, var(--accent-2), var(--accent));
-  color: #ffffff;
+  color: var(--on-accent);
   font-weight: 700;
   font-size: var(--fs-base);
   padding: 12px var(--space-5);
@@ -90,7 +96,7 @@
 
 .hero-search-button:hover {
   filter: brightness(1.08);
-  box-shadow: 0 8px 16px -4px rgba(240, 78, 0, 0.45);
+  box-shadow: var(--accent-glow);
 }
 
 .hero-search-button:active {
@@ -149,7 +155,7 @@
 .hero-chip.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   font-weight: 700;
   box-shadow: var(--shadow-sm);
 }

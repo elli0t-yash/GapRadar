@@ -49,9 +49,9 @@
 
 .evidence-group.is-contradicts {
   padding: var(--space-3);
-  border: 1px solid rgba(179, 47, 47, 0.24);
+  border: 1px solid var(--danger-border);
   border-radius: var(--radius-lg);
-  background: rgba(179, 47, 47, 0.035);
+  background: var(--danger-bg-subtle);
 }
 
 .evidence-card-list {
@@ -74,7 +74,7 @@
 }
 
 .evidence-card.is-contradicts {
-  border-color: rgba(179, 47, 47, 0.26);
+  border-color: var(--danger-border);
 }
 
 .evidence-card-topline {
@@ -101,9 +101,9 @@
 }
 
 .is-contradicts > .evidence-card-topline .evidence-classification {
-  border-color: rgba(179, 47, 47, 0.26);
-  background: rgba(179, 47, 47, 0.08);
-  color: #922727;
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
 }
 
 .evidence-score {

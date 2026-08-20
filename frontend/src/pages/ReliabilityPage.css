@@ -2,8 +2,8 @@
   min-height: 100%;
   padding: 56px 0 88px;
   background:
-    radial-gradient(circle at 88% 3%, rgba(255, 145, 66, 0.13), transparent 26%),
-    linear-gradient(180deg, #fffaf5 0%, #fbf5ed 100%);
+    radial-gradient(circle at 88% 3%, var(--page-glow), transparent 26%),
+    linear-gradient(180deg, var(--page-grad-a) 0%, var(--page-grad-b) 100%);
 }
 
 .reliability-hero {
@@ -43,7 +43,7 @@
   padding: 20px;
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.84);
+  background: var(--surface-translucent);
   box-shadow: var(--shadow-md);
 }
 
@@ -68,9 +68,9 @@
   border: 0;
   border-radius: 999px;
   padding: 12px 18px;
-  color: #fff;
+  color: var(--on-accent);
   background: linear-gradient(135deg, var(--accent-2), var(--accent));
-  box-shadow: 0 10px 24px -10px rgba(194, 71, 0, 0.7);
+  box-shadow: var(--accent-glow);
   cursor: pointer;
   font-weight: 800;
 }
@@ -88,17 +88,17 @@
 .reliability-error {
   margin-bottom: 20px;
   padding: 13px 16px;
-  border: 1px solid #e7a19a;
+  border: 1px solid var(--danger-border);
   border-radius: var(--radius-md);
-  color: #8e2f24;
-  background: #fff4f2;
+  color: var(--danger-text);
+  background: var(--danger-bg);
 }
 
 .reliability-health-card,
 .reliability-card {
-  border: 1px solid #eadfD2;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 14px 36px -28px rgba(58, 30, 0, 0.55);
+  border: 1px solid var(--border);
+  background: var(--surface-translucent-strong);
+  box-shadow: var(--shadow-card);
 }
 
 .reliability-health-card {
@@ -146,20 +146,20 @@
 
 .reliability-status--healthy,
 .reliability-status--self_healed {
-  color: #2f7957;
-  background: #f0faf5;
+  color: var(--ok-text);
+  background: var(--ok-bg);
 }
 
 .reliability-status--drift_detected,
 .reliability-status--rejected {
-  color: #a43b2c;
-  background: #fff2ef;
+  color: var(--danger-text);
+  background: var(--danger-bg);
 }
 
 .reliability-status--healing,
 .reliability-status--verifying {
-  color: #b35a00;
-  background: #fff6e9;
+  color: var(--warn-text);
+  background: var(--warn-bg);
 }
 
 .reliability-status--healing span,
@@ -206,8 +206,8 @@
 .reliability-severity {
   border-radius: 999px;
   padding: 5px 9px;
-  color: #9c3427;
-  background: #fff0ed;
+  color: var(--danger-text);
+  background: var(--danger-bg);
   font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
@@ -263,7 +263,7 @@
   bottom: 0;
   left: 5px;
   width: 1px;
-  background: #e5d7c9;
+  background: var(--border-strong);
   content: "";
 }
 
@@ -272,7 +272,7 @@
   width: 11px;
   height: 11px;
   margin-top: 4px;
-  border: 3px solid #fff;
+  border: 3px solid var(--bg-raised);
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-border);
@@ -330,9 +330,9 @@
   font-weight: 800;
 }
 
-.field-status--healthy { color: #2f7957; background: #edf8f2; }
+.field-status--healthy { color: var(--ok-text); background: var(--ok-bg); }
 .field-status--drift,
-.field-status--regression { color: #9c3427; background: #fff0ed; }
+.field-status--regression { color: var(--danger-text); background: var(--danger-bg); }
 
 .repair-list {
   display: grid;
@@ -343,11 +343,11 @@
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: #fffcf8;
+  background: var(--bg-inset);
 }
 
-.repair-attempt--rejected { border-color: #efb6af; }
-.repair-attempt--approved { border-color: #a8d8c1; }
+.repair-attempt--rejected { border-color: var(--danger-border); }
+.repair-attempt--approved { border-color: var(--ok-border); }
 
 .repair-attempt header {
   display: flex;
@@ -402,8 +402,8 @@
 
 .repair-checks span { color: var(--text-h); text-transform: capitalize; }
 .repair-checks code { color: var(--text-muted); }
-.repair-check--pass { color: #2f7957; }
-.repair-check--fail { color: #a43b2c; }
+.repair-check--pass { color: var(--ok-text); }
+.repair-check--fail { color: var(--danger-text); }
 
 .healing-proof-card {
   display: flex;
@@ -424,14 +424,14 @@
   font-size: var(--fs-sm);
 }
 
-.fidelity-list strong { color: #2f7957; }
+.fidelity-list strong { color: var(--ok-text); }
 
 .proof-decision {
   margin-top: auto;
   padding: 22px;
   border-radius: var(--radius-md);
-  color: #fff;
-  background: #3a1e00;
+  color: var(--invert-text);
+  background: var(--invert-bg);
 }
 
 .proof-decision span {
@@ -443,7 +443,7 @@
 .proof-decision strong {
   display: block;
   margin-top: 3px;
-  color: #ffb47f;
+  color: var(--invert-accent);
   font-size: var(--fs-xl);
 }
 
@@ -467,10 +467,10 @@
 .live-evidence-section {
   margin: 34px 0 52px;
   padding: 30px;
-  border: 1px solid #dfc9b3;
+  border: 1px solid var(--border-strong);
   border-radius: 24px;
-  background: #f7eadc;
-  box-shadow: 0 24px 60px -44px rgba(58, 30, 0, 0.8);
+  background: var(--surface-feature);
+  box-shadow: var(--shadow-feature);
 }
 
 .live-evidence-header {
@@ -504,11 +504,11 @@
 .live-evidence-badges span,
 .live-provider-mark,
 .evidence-count {
-  border: 1px solid #d4b697;
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
   padding: 5px 9px;
-  color: #70401f;
-  background: #fff8f0;
+  color: var(--accent-text);
+  background: var(--bg-inset);
   font-size: 10px;
   font-weight: 850;
   letter-spacing: 0.07em;
@@ -520,10 +520,10 @@
   gap: 10px;
   margin-bottom: 18px;
   padding: 12px 14px;
-  border: 1px solid #e4bd78;
+  border: 1px solid var(--warn-border);
   border-radius: var(--radius-md);
-  color: #774613;
-  background: #fff7e6;
+  color: var(--warn-text);
+  background: var(--warn-bg);
   font-size: var(--fs-xs);
 }
 
@@ -565,8 +565,8 @@
 
 .live-evidence-facts code { font-size: 11px; }
 
-.evidence-pass { color: #2f7957 !important; }
-.evidence-fail { color: #a43b2c !important; }
+.evidence-pass { color: var(--ok-text) !important; }
+.evidence-fail { color: var(--danger-text) !important; }
 
 .live-invalid-card { margin-bottom: 20px; }
 
@@ -609,7 +609,7 @@
   padding: 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: #fffcf8;
+  background: var(--bg-inset);
 }
 
 .live-repair-list header {
@@ -637,10 +637,10 @@
 .patch-unavailable {
   margin-top: 14px;
   padding: 13px;
-  border: 1px dashed #d9b68f;
+  border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
-  color: #674328;
-  background: #fff8ef;
+  color: var(--text);
+  background: var(--bg-inset);
   font-size: var(--fs-xs);
 }
 
@@ -665,25 +665,25 @@
   gap: 14px;
   padding: 9px 11px;
   border-radius: 9px;
-  background: #f7f3ed;
+  background: var(--bg-subtle);
   font-size: 11px;
 }
 
 .verification-samples span { color: var(--text-h); }
-.verification-samples code { flex-shrink: 0; color: #2f7957; }
+.verification-samples code { flex-shrink: 0; color: var(--ok-text); }
 
 .regression-proof {
   display: grid;
   gap: 4px;
   margin-top: 13px;
   padding: 12px;
-  border-left: 3px solid #c74a3a;
+  border-left: 3px solid var(--danger-strong);
   color: var(--text-muted);
-  background: #fff3f1;
+  background: var(--danger-bg);
   font-size: 11px;
 }
 
-.regression-proof strong { color: #9c3427; }
+.regression-proof strong { color: var(--danger-text); }
 
 .live-final-decision {
   display: grid;
@@ -691,13 +691,13 @@
   margin-top: 16px;
   padding: 16px;
   border-radius: var(--radius-md);
-  color: #fff;
-  background: #3a1e00;
+  color: var(--invert-text);
+  background: var(--invert-bg);
 }
 
 .live-final-decision span,
 .live-final-decision small { font-size: 11px; opacity: 0.72; }
-.live-final-decision strong { color: #ffb47f; font-size: var(--fs-md); }
+.live-final-decision strong { color: var(--invert-accent); font-size: var(--fs-md); }
 
 .automation-card { margin-top: 20px; }
 
@@ -713,7 +713,7 @@
   padding: 13px 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: #fffcf8;
+  background: var(--bg-inset);
 }
 
 .automation-flow > div:not(:last-child)::after {
@@ -758,7 +758,7 @@
   align-items: start;
   margin: 0 0 20px;
   padding-top: 28px;
-  border-top: 1px solid #d9c9ba;
+  border-top: 1px solid var(--border-strong);
 }
 
 .fixture-replay-divider > span {

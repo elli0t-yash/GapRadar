@@ -1,20 +1,102 @@
+/* Theme tokens.
+ *
+ * Light is the base palette on :root; dark overrides only the colour tokens
+ * under [data-theme="dark"]. Every component consumes the semantic names
+ * below -- there is exactly one set of component CSS, and no filter/invert
+ * tricks anywhere.
+ *
+ * The theme attribute is stamped on <html> by the pre-hydration script in
+ * index.html before the first paint, so no prefers-color-scheme block is
+ * needed here: the script already resolves stored preference -> system
+ * preference. src/theme.ts keeps the attribute in sync afterwards.
+ */
 :root {
+  /* -- surfaces & text --------------------------------------------------- */
   --text: #5b4a3d;
   --text-h: #3a1e00;
   --text-muted: #9c8879;
   --bg: #fffaf5;
   --bg-raised: #ffffff;
   --bg-subtle: #f7f5f2;
+  /* One step *inside* a raised card: repair rows, flow steps, inset panels. */
+  --bg-inset: #fffcf8;
   --border: #ece7e0;
   --border-strong: #ddd5ca;
+
+  /* -- brand ------------------------------------------------------------- */
   --accent: #ff6a00;
   --accent-2: #ff9142;
   --accent-bg: rgba(255, 106, 0, 0.08);
   --accent-border: rgba(255, 106, 0, 0.3);
   --accent-text: #c24700;
+  /* Text/iconography sitting on a filled accent surface. */
+  --on-accent: #ffffff;
+  --accent-glow: 0 8px 16px -4px rgba(240, 78, 0, 0.4);
+  /* The warmer red-orange used by the intro animation and display heading. */
+  --flame: #f4502e;
+
+  /* -- classification colours (phase state, evidence, health) ------------ */
+  --ok-text: #226d44;
+  --ok-strong: #2f8f5b;
+  --ok-bg: rgba(47, 143, 91, 0.1);
+  --ok-border: rgba(47, 143, 91, 0.28);
+
+  --warn-text: #8f5c00;
+  --warn-strong: #b57400;
+  --warn-bg: rgba(200, 130, 0, 0.1);
+  --warn-border: rgba(200, 130, 0, 0.3);
+
+  --danger-text: #922727;
+  --danger-strong: #b32f2f;
+  --danger-bg: rgba(179, 47, 47, 0.08);
+  --danger-border: rgba(179, 47, 47, 0.26);
+  /* Whole-group tint for contradicting evidence -- a hint, never an alarm. */
+  --danger-bg-subtle: rgba(179, 47, 47, 0.035);
+
+  /* -- form controls ----------------------------------------------------- */
+  --field-bg: #fffaf5;
+  --field-border: #ddd5ca;
+  --field-text: #3a1e00;
+  --field-placeholder: #9c8879;
+
+  /* -- decorative -------------------------------------------------------- */
+  --overlay: rgba(20, 18, 20, 0.45);
+  --dot-grid: rgba(244, 80, 46, 0.08);
+  --dot-grid-neutral: rgba(58, 30, 0, 0.08);
+  --page-grad-a: #fffaf5;
+  --page-grad-b: #fbf5ed;
+  --page-glow: rgba(255, 145, 66, 0.13);
+  --surface-translucent: rgba(255, 255, 255, 0.84);
+  --surface-translucent-strong: rgba(255, 255, 255, 0.9);
+  /* The tinted "live evidence" slab that frames the RecallGuard proof. */
+  --surface-feature: #f7eadc;
+
+  /* Inverted decision panel (deliberately the darkest thing on the page). */
+  --invert-bg: #3a1e00;
+  --invert-text: #ffffff;
+  --invert-accent: #ffb47f;
+
+  /* Showcase card tones. */
+  --tone-warm-bg: #ffe0cc;
+  --tone-warm-text: #8a3a00;
+  --tone-deep-bg: #ff6600;
+  --tone-deep-text: #ffffff;
+
+  /* Intro animation. */
+  --intro-card-bg: #ffffff;
+  --intro-card-text: #3a1e00;
+  --intro-tag-bg: #f7ede4;
+  --intro-tag-text: #8a5a44;
+  --intro-caption: #6b5645;
+  --intro-badge-bg: #8a7a6e;
+  --intro-card-shadow: 0 6px 16px rgba(58, 30, 0, 0.08);
+
+  /* -- elevation --------------------------------------------------------- */
   --shadow-sm: 0 1px 2px rgba(41, 21, 0, 0.06);
   --shadow-md: 0 16px 32px -8px rgba(41, 21, 0, 0.16);
   --shadow-lg: 0 24px 48px -12px rgba(41, 21, 0, 0.22);
+  --shadow-card: 0 14px 36px -28px rgba(58, 30, 0, 0.55);
+  --shadow-feature: 0 24px 60px -44px rgba(58, 30, 0, 0.8);
   --focus-ring: 0 0 0 3px rgba(255, 106, 0, 0.35);
 
   --sans:
@@ -41,29 +123,91 @@
   --fs-xl: 28px;
   --fs-2xl: 36px;
 
-  color-scheme: light dark;
+  color-scheme: light;
+  accent-color: #ff6a00;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #5b4a3d;
-    --text-h: #3a1e00;
-    --text-muted: #9c8879;
-    --bg: #fffaf5;
-    --bg-raised: #ffffff;
-    --bg-subtle: #f7f5f2;
-    --border: #ece7e0;
-    --border-strong: #ddd5ca;
-    --accent: #ff6a00;
-    --accent-2: #ff9142;
-    --accent-bg: rgba(255, 106, 0, 0.16);
-    --accent-border: rgba(255, 106, 0, 0.4);
-    --accent-text: #ff9142;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow-md: 0 16px 32px -8px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
-    --focus-ring: 0 0 0 3px rgba(255, 145, 66, 0.4);
-  }
+/* Warm charcoal, not black; warm off-white, not white. The orange stays the
+   same hue and only lifts in value so it still carries on a dark ground. */
+:root[data-theme="dark"] {
+  --text: #d6cabf;
+  --text-h: #f6f0e9;
+  --text-muted: #a3948a;
+  --bg: #131010;
+  --bg-raised: #1c1815;
+  --bg-subtle: #262019;
+  --bg-inset: #211c18;
+  --border: #322b25;
+  --border-strong: #473d35;
+
+  --accent: #ff7a1a;
+  --accent-2: #ffa15c;
+  --accent-bg: rgba(255, 138, 46, 0.14);
+  --accent-border: rgba(255, 138, 46, 0.34);
+  --accent-text: #ffa768;
+  /* Dark ink on a lit orange fill: white on orange is ~2.9:1 and looks
+     washed against a dark page, this reads as a deliberate lit surface. */
+  --on-accent: #241207;
+  --accent-glow: 0 8px 20px -6px rgba(255, 122, 26, 0.45);
+  --flame: #ff7048;
+
+  --ok-text: #6fd6a3;
+  --ok-strong: #58c48f;
+  --ok-bg: rgba(88, 196, 143, 0.12);
+  --ok-border: rgba(88, 196, 143, 0.3);
+
+  --warn-text: #f0b45a;
+  --warn-strong: #e8a53f;
+  --warn-bg: rgba(232, 165, 63, 0.12);
+  --warn-border: rgba(232, 165, 63, 0.32);
+
+  --danger-text: #ff9b8f;
+  --danger-strong: #f08175;
+  --danger-bg: rgba(240, 129, 117, 0.12);
+  --danger-border: rgba(240, 129, 117, 0.32);
+  --danger-bg-subtle: rgba(240, 129, 117, 0.06);
+
+  --field-bg: #151211;
+  --field-border: #473d35;
+  --field-text: #f6f0e9;
+  --field-placeholder: #8d8078;
+
+  --overlay: rgba(6, 4, 3, 0.68);
+  --dot-grid: rgba(255, 145, 66, 0.07);
+  --dot-grid-neutral: rgba(255, 236, 220, 0.05);
+  --page-grad-a: #131010;
+  --page-grad-b: #171310;
+  --page-glow: rgba(255, 145, 66, 0.1);
+  --surface-translucent: rgba(32, 27, 23, 0.84);
+  --surface-translucent-strong: rgba(28, 24, 21, 0.9);
+  --surface-feature: #1f1a15;
+
+  --invert-bg: #2b1d11;
+  --invert-text: #f6f0e9;
+  --invert-accent: #ffb47f;
+
+  --tone-warm-bg: #3a2416;
+  --tone-warm-text: #ffc79b;
+  --tone-deep-bg: #b34c00;
+  --tone-deep-text: #fff3e8;
+
+  --intro-card-bg: #221d19;
+  --intro-card-text: #f6f0e9;
+  --intro-tag-bg: rgba(255, 236, 220, 0.09);
+  --intro-tag-text: #d8b9a3;
+  --intro-caption: #a3948a;
+  --intro-badge-bg: #4a4038;
+  --intro-card-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 16px 32px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
+  --shadow-card: 0 14px 36px -22px rgba(0, 0, 0, 0.75);
+  --shadow-feature: 0 24px 60px -38px rgba(0, 0, 0, 0.9);
+  --focus-ring: 0 0 0 3px rgba(255, 145, 66, 0.45);
+
+  color-scheme: dark;
+  accent-color: #ff7a1a;
 }
 
 * {
@@ -109,6 +253,38 @@ a {
 
 button {
   font: inherit;
+}
+
+/* Form controls never fall back to the browser's default white field. */
+input,
+textarea,
+select {
+  color: var(--field-text);
+  background: var(--field-bg);
+  border-color: var(--field-border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--field-placeholder);
+  opacity: 1;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Chrome paints autofilled fields with its own hard-coded background. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--field-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--field-bg) inset;
+  caret-color: var(--field-text);
 }
 
 :focus-visible {

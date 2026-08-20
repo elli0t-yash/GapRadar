@@ -237,7 +237,7 @@
   font: inherit;
   font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--bg-raised);
+  color: var(--on-accent);
   background: var(--accent);
   border: none;
   border-radius: 999px;
@@ -303,7 +303,7 @@
   font: inherit;
   font-size: var(--fs-sm);
   font-weight: 700;
-  color: var(--bg-raised);
+  color: var(--on-accent);
   background: var(--accent);
   border: none;
   border-radius: 999px;
@@ -406,17 +406,17 @@
   align-items: baseline;
   gap: var(--space-xs, 0.5rem);
   font-size: var(--fs-sm, 0.875rem);
-  color: var(--text-h, #3a1e00);
+  color: var(--text-h);
 }
 
 .research-stage-mark {
-  color: var(--accent, #ff6a00);
+  color: var(--accent);
   font-weight: 600;
   text-align: center;
 }
 
 .research-stage-detail {
-  color: var(--accent-text, #a34500);
+  color: var(--accent-text);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -433,22 +433,22 @@
 .research-notice-warning {
   margin: var(--space-sm, 0.75rem) 0 0;
   padding: var(--space-xs, 0.5rem) var(--space-sm, 0.75rem);
-  border-left: 2px solid var(--accent-border, #ffd0ad);
-  background: var(--accent-bg, #fff2e8);
+  border-left: 2px solid var(--accent-border);
+  background: var(--accent-bg);
   border-radius: var(--radius-sm, 6px);
   font-size: var(--fs-sm, 0.875rem);
-  color: var(--accent-text, #a34500);
+  color: var(--accent-text);
 }
 
 /* A completed-but-partial run, shown above real results. */
 .research-partial-warning {
   margin: 0 0 var(--space-sm, 0.75rem);
   padding: var(--space-xs, 0.5rem) var(--space-sm, 0.75rem);
-  border: 1px solid var(--accent-border, #ffd0ad);
-  background: var(--accent-bg, #fff2e8);
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
   border-radius: var(--radius-sm, 6px);
   font-size: var(--fs-sm, 0.875rem);
-  color: var(--accent-text, #a34500);
+  color: var(--accent-text);
 }
 
 .research-analyse:disabled,
@@ -461,18 +461,18 @@
    styling, deliberately: the run worked, and the answer is "none". Any
    error treatment here would report a failure that did not happen. */
 .research-notice.is-complete {
-  border: 1px solid var(--accent-border, #ffd0ad);
-  background: var(--bg, #fffaf5);
+  border: 1px solid var(--accent-border);
+  background: var(--bg-subtle);
 }
 
 /* A dead end: no search specific enough could be formed. Calm and
    neutral -- nothing failed, and there is no action to offer. */
 .research-notice.is-dead-end {
-  border: 1px dashed var(--accent-border, #ffd0ad);
-  background: var(--bg, #fffaf5);
+  border: 1px dashed var(--accent-border);
+  background: var(--bg-subtle);
 }
 
 .research-notice.is-dead-end .research-notice-title,
 .research-notice.is-complete .research-notice-title {
-  color: var(--text-h, #3a1e00);
+  color: var(--text-h);
 }
