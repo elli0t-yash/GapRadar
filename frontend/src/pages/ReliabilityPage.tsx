@@ -5,7 +5,7 @@ import {
   getReliabilityDemo,
   startReliabilityDemo,
 } from "../api/reliability";
-import { isAbort, NetworkError } from "../api/client";
+import { ApiError, isAbort, NetworkError } from "../api/client";
 import type {
   LiveBrightDataEvidence,
   ReliabilityDemo,
@@ -37,7 +37,10 @@ const EVENT_LABELS: Record<string, string> = {
 
 function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
-    return "Could not reach the GapRadar API. Start the backend and check its CORS settings.";
+    return "We couldn't connect to GapRadar. Retained reliability evidence remains safe.";
+  }
+  if (error instanceof ApiError && error.status >= 500) {
+    return "GapRadar couldn't load the reliability evidence just now.";
   }
   return error instanceof Error ? error.message : "The reliability demo failed.";
 }
@@ -314,6 +317,65 @@ function LiveEvidenceSection({
   );
 }
 
+function ReliabilityNarrative({ demo }: { demo: ReliabilityDemo | null }) {
+  const hazard = demo?.field_health.find((field) => field.field === "hazard");
+  const approvedRepair = demo?.repair_attempts.find(
+    (repair) => repair.status === "approved",
+  );
+  const hazardValidation = approvedRepair?.verification.find(
+    (check) => check.field === "hazard",
+  );
+  const driftValue =
+    hazardValidation?.before_pct ??
+    demo?.repair_attempts
+      .flatMap((repair) => repair.verification)
+      .find((check) => check.field === "hazard")?.before_pct ??
+    hazard?.current_pct;
+
+  return (
+    <section className="reliability-narrative" aria-labelledby="reliability-narrative-title">
+      <header>
+        <p className="reliability-eyebrow">RecallGuard proof path</p>
+        <h2 id="reliability-narrative-title">Detection is only the beginning.</h2>
+        <p>Fixture values below come directly from the deterministic replay.</p>
+      </header>
+      <ol>
+        <li className="is-healthy">
+          <span>01</span>
+          <small>Healthy baseline</small>
+          <strong>{hazard ? `Hazard ${hazard.baseline_pct}%` : "Waiting for replay"}</strong>
+        </li>
+        <li className={demo?.incident_id ? "is-drift" : "is-pending"}>
+          <span>02</span>
+          <small>Drift detected</small>
+          <strong>
+            {hazard && driftValue !== undefined
+              ? `${hazard.baseline_pct}% → ${driftValue}%`
+              : "Pending"}
+          </strong>
+          {demo?.incident_id ? <em>Extraction drift detected</em> : null}
+        </li>
+        <li className={approvedRepair ? "is-validation" : "is-pending"}>
+          <span>03</span>
+          <small>Repair validation</small>
+          <strong>
+            {hazardValidation
+              ? `${hazardValidation.before_pct}% → ${hazardValidation.after_pct}%`
+              : "Pending"}
+          </strong>
+          {demo?.proof ? <em>Schema · semantics · source fidelity</em> : null}
+        </li>
+        <li className={demo?.proof ? "is-decision" : "is-pending"}>
+          <span>04</span>
+          <small>Decision</small>
+          <strong>{demo?.proof?.decision ?? "Pending"}</strong>
+          {demo?.proof ? <em>Fresh verification passed</em> : null}
+        </li>
+      </ol>
+    </section>
+  );
+}
+
 export function ReliabilityPage() {
   const [demo, setDemo] = useState<ReliabilityDemo | null>(null);
   const [liveEvidence, setLiveEvidence] = useState<LiveBrightDataEvidence | null>(null);
@@ -431,6 +493,8 @@ export function ReliabilityPage() {
               <p>Safe, repeatable RecallGuard state transitions. No Bright Data job is implied.</p>
             </div>
           </div>
+
+          <ReliabilityNarrative demo={demo} />
 
           <section className="reliability-health-card">
             <div>

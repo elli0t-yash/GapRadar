@@ -3,19 +3,34 @@
 
 .investigation-progress {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
 }
 
 .ip-phase {
+  position: relative;
+  min-width: 0;
   padding: var(--space-3);
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
 
+.ip-phase:not(:last-child)::after {
+  position: absolute;
+  top: 28px;
+  right: calc(var(--space-2) * -1 - 1px);
+  z-index: 2;
+  width: calc(var(--space-2) + 2px);
+  height: 1px;
+  background: var(--border-strong);
+  content: "";
+}
+
 .ip-phase-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -45,6 +60,13 @@
   white-space: nowrap;
 }
 
+.ip-summary {
+  margin: var(--space-2) 0 0 28px;
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 750;
+}
+
 .ip-phase.is-complete .ip-mark { color: var(--ok-strong); }
 .ip-phase.is-complete .ip-state {
   background: var(--ok-bg);
@@ -57,6 +79,14 @@
   background: var(--accent-bg);
   border-color: var(--accent-border);
   color: var(--accent-text);
+}
+
+.ip-phase.is-running .ip-mark {
+  animation: ip-running-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ip-running-pulse {
+  50% { transform: scale(1.2); opacity: 0.55; }
 }
 
 /* PARTIAL IS A WARNING, NOT A FAILURE. It carries real results. */
@@ -84,6 +114,20 @@
   font-size: var(--fs-sm);
   color: var(--text);
   line-height: 1.5;
+}
+
+.ip-details {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.ip-details summary {
+  width: fit-content;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: 700;
 }
 
 .ip-rows {
@@ -124,8 +168,22 @@
 }
 
 @media (max-width: 520px) {
+  .investigation-progress { grid-template-columns: 1fr; }
+  .ip-phase:not(:last-child)::after { display: none; }
+
   .ip-rows,
   .ip-note {
     padding-left: 0;
   }
+
+  .ip-summary { margin-left: 0; }
+}
+
+@media (min-width: 521px) and (max-width: 900px) {
+  .investigation-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ip-phase::after { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ip-phase.is-running .ip-mark { animation: none; }
 }

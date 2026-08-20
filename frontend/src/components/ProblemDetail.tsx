@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiError, NetworkError } from "../api/client";
 import {
   getOpportunity,
@@ -23,14 +24,14 @@ import "./ProblemDetail.css";
 /** The four 1-10 component scores. `itch` is 0-100 and is shown separately. */
 const SCORE_LABELS: { key: keyof Problem["scores"]; label: string }[] = [
   { key: "severity", label: "Severity" },
-  { key: "tam", label: "Market size" },
+  { key: "tam", label: "Market potential" },
   { key: "whitespace", label: "Whitespace" },
   { key: "frequency", label: "Frequency" },
 ];
 
 function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
-    return "Could not reach the API. Check the backend is running and that this origin is allowed.";
+    return "We couldn't connect to GapRadar. The opportunity already on screen remains available.";
   }
 
   if (error instanceof ApiError) {
@@ -39,7 +40,7 @@ function describeError(error: unknown): string {
       : error.message;
   }
 
-  return "Something went wrong.";
+  return "We couldn't load this intelligence.";
 }
 
 // A run that has reported nothing yet, and the shape old runs
@@ -60,6 +61,7 @@ export function ProblemDetail({
   onClose: () => void;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Rendered optimistically from the feed row -- the detail endpoint returns
   // the identical shape -- then replaced by the authoritative record.
@@ -72,11 +74,33 @@ export function ProblemDetail({
   const [researchAttempt, setResearchAttempt] = useState(0);
 
   useEffect(() => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     closeButtonRef.current?.focus();
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         onClose();
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     }
 
@@ -84,6 +108,8 @@ export function ProblemDetail({
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
     };
   }, [onClose]);
 
@@ -285,19 +311,25 @@ export function ProblemDetail({
       });
   }, [problem.id]);
 
+  const hasScoreBreakdown =
+    detail.scores.itch !== null ||
+    SCORE_LABELS.some(({ key }) => detail.scores[key] !== null);
+
   return (
     <div className="problem-detail-overlay" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="problem-detail"
         role="dialog"
         aria-modal="true"
         aria-labelledby="problem-detail-title"
+        aria-describedby="problem-detail-description"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="problem-detail-header">
-          {detail.category && (
-            <span className="problem-detail-tag">{detail.category}</span>
-          )}
+          <button type="button" className="problem-detail-back" onClick={onClose}>
+            <span aria-hidden="true">←</span> Opportunities
+          </button>
 
           <button
             ref={closeButtonRef}
@@ -310,15 +342,37 @@ export function ProblemDetail({
           </button>
         </div>
 
-        <h2 id="problem-detail-title" className="problem-detail-title">
-          {detail.title}
-        </h2>
+        <header className="problem-detail-report-header">
+          <div>
+            <div className="problem-detail-kickers">
+              {detail.category && (
+                <span className="problem-detail-tag">{detail.category}</span>
+              )}
+              <span
+                className="problem-detail-trust"
+                title="This opportunity is visible because its source collector currently passes GapRadar reliability gating."
+              >
+                <span aria-hidden="true">✓</span> Trusted source
+              </span>
+            </div>
+            <p className="problem-detail-eyebrow">Opportunity intelligence report</p>
+            <h2 id="problem-detail-title" className="problem-detail-title">
+              {detail.title}
+            </h2>
+          </div>
+
+          <div className="problem-detail-score-hero">
+            <span>Opportunity score</span>
+            <strong>{detail.signal === null ? "—" : detail.signal}</strong>
+            <small>{detail.signal === null ? "Not scorable" : "out of 100"}</small>
+          </div>
+        </header>
 
         {detailError && (
           <p className="problem-detail-notice">{detailError}</p>
         )}
 
-        <div className="problem-detail-meta">
+        <div className="problem-detail-meta" aria-label="Opportunity provenance">
           {detail.source && (
             <>
               <span>{detail.source}</span>
@@ -328,78 +382,83 @@ export function ProblemDetail({
 
           <span>{formatRelativeDate(detail.date)}</span>
 
-          <span aria-hidden="true">·</span>
-
-          {/* Not scorable is a backend answer, never a zero. */}
-          <span>
-            {detail.signal === null
-              ? "Not scorable"
-              : `Opportunity score ${detail.signal}`}
-          </span>
         </div>
 
-        <p className="problem-detail-description">
-          {detail.description}
-        </p>
+        <section className="problem-detail-section" aria-labelledby="problem-overview-title">
+          <p className="problem-detail-section-label">Meaning</p>
+          <h3 id="problem-overview-title">Overview</h3>
+          <p id="problem-detail-description" className="problem-detail-description">
+            {detail.description}
+          </p>
+        </section>
 
-        <dl className="problem-detail-scores">
-          {detail.scores.itch !== null && (
-            <div className="problem-detail-score">
-              <dt>Itch</dt>
-
-              <dd>
-                <div className="problem-detail-score-bar">
-                  <div
-                    className="problem-detail-score-fill"
-                    style={{
-                      width: `${detail.scores.itch}%`,
-                    }}
-                  />
-                </div>
-
-                <span>{detail.scores.itch}/100</span>
-              </dd>
+        <section className="problem-detail-section" aria-labelledby="problem-evidence-title">
+          <p className="problem-detail-section-label">Source trail</p>
+          <h3 id="problem-evidence-title">Evidence</h3>
+          <div className="problem-detail-evidence-row">
+            <div>
+              <strong>{detail.source ?? "Persisted source"}</strong>
+              <span>Observed {formatRelativeDate(detail.date)}</span>
             </div>
-          )}
+            {detail.sourceUrl && (
+              <a
+                className="problem-detail-link"
+                href={detail.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View original source <span aria-hidden="true">↗</span>
+              </a>
+            )}
+          </div>
+        </section>
 
-          {SCORE_LABELS.map(({ key, label }) => {
-            const value = detail.scores[key];
-
-            if (value === null) {
-              return null;
-            }
-
-            return (
-              <div className="problem-detail-score" key={key}>
-                <dt>{label}</dt>
-
-                <dd>
-                  <div className="problem-detail-score-bar">
-                    <div
-                      className="problem-detail-score-fill"
-                      style={{
-                        width: `${(value / 10) * 100}%`,
-                      }}
-                    />
+        {hasScoreBreakdown ? (
+          <details className="problem-detail-breakdown">
+            <summary>Inspect score breakdown</summary>
+            <p>
+              Component scores are backend assessments, shown on their native
+              scales without converting them into percentages.
+            </p>
+            <dl className="problem-detail-scores">
+              {detail.scores.itch !== null && (
+                <div className="problem-detail-score">
+                  <dt>Problem intensity</dt>
+                  <dd>{detail.scores.itch}/100</dd>
+                </div>
+              )}
+              {SCORE_LABELS.map(({ key, label }) => {
+                const value = detail.scores[key];
+                if (value === null) return null;
+                return (
+                  <div className="problem-detail-score" key={key}>
+                    <dt>{label}</dt>
+                    <dd>{value}/10</dd>
                   </div>
+                );
+              })}
+            </dl>
+          </details>
+        ) : null}
 
-                  <span>{value}/10</span>
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-
-        {detail.sourceUrl && (
-          <a
-            className="problem-detail-link"
-            href={detail.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View source ↗
-          </a>
-        )}
+        <section
+          className="problem-detail-section is-reliability"
+          aria-labelledby="problem-reliability-title"
+        >
+          <p className="problem-detail-section-label">Source health</p>
+          <h3 id="problem-reliability-title">Reliability</h3>
+          <div className="problem-detail-reliability-row">
+            <span aria-hidden="true">✓</span>
+            <div>
+              <strong>Trusted data</strong>
+              <p>
+                This opportunity is visible because its source collector passes
+                GapRadar reliability gating.
+              </p>
+            </div>
+            <Link to="/reliability">Inspect RecallGuard <span aria-hidden="true">→</span></Link>
+          </div>
+        </section>
 
         <ResearchSection
           research={research}

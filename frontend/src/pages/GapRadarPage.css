@@ -10,31 +10,36 @@
 }
 
 .gapradar-section {
-  margin-bottom: var(--space-6);
+  margin-bottom: calc(var(--space-6) * 1.5);
+  padding-top: var(--space-6);
 }
 
 .gapradar-section-header {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: var(--space-4);
+  max-width: 720px;
+  margin-bottom: var(--space-5);
 }
 
 .gapradar-section-header h2 {
-  font-size: var(--fs-lg);
+  font-size: clamp(var(--fs-xl), 3vw, var(--fs-2xl));
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
 }
 
-.gapradar-stars {
-  color: var(--accent);
-  font-size: var(--fs-sm);
-  letter-spacing: 1px;
+.gapradar-section-eyebrow {
+  color: var(--accent-text);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .gapradar-section-subtitle {
+  max-width: 68ch;
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
@@ -43,6 +48,10 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-3);
+}
+
+.gapradar-grid > .problem-card.is-featured {
+  grid-column: span 2;
 }
 
 @media (max-width: 900px) {
@@ -54,5 +63,11 @@
 @media (max-width: 600px) {
   .gapradar-grid {
     grid-template-columns: 1fr;
+  }
+
+  .gapradar-grid > .problem-card.is-featured { grid-column: auto; }
+
+  .gapradar-section {
+    padding-top: var(--space-5);
   }
 }

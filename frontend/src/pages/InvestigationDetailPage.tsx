@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { isAbort, NetworkError } from "../api/client";
 import {
   getInvestigation,
@@ -60,9 +60,9 @@ const IDLE_SURFACES: TerminalSurfaceState = {
 
 function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
-    return "Could not reach the GapRadar API. Start the backend and check its CORS settings.";
+    return "We couldn't connect to GapRadar. Your persisted investigation is safe.";
   }
-  return error instanceof Error ? error.message : "The investigation could not be loaded.";
+  return error instanceof Error ? error.message : "We couldn't load this intelligence.";
 }
 
 function displayLabel(value: string): string {
@@ -349,8 +349,13 @@ export function InvestigationDetailPage() {
     return (
       <PageShell>
         <div className="container investigation-detail-page">
-          <div className="investigation-loading" role="status">
-            Loading investigation…
+          <div className="investigation-loading" role="status" aria-label="Loading investigation">
+            <span className="investigation-loading-line is-label" />
+            <span className="investigation-loading-line is-title" />
+            <span className="investigation-loading-line is-title-short" />
+            <div className="investigation-loading-metrics">
+              <span /><span /><span />
+            </div>
           </div>
         </div>
       </PageShell>
@@ -362,9 +367,10 @@ export function InvestigationDetailPage() {
       <PageShell>
         <div className="container investigation-detail-page">
           <ErrorState
-            title="Investigation unavailable"
+            title="We couldn't load this intelligence"
             message={pageError ?? "The investigation could not be found."}
             onRetry={() => void loadPage()}
+            note="Your persisted data is safe."
           />
         </div>
       </PageShell>
@@ -377,6 +383,9 @@ export function InvestigationDetailPage() {
     <PageShell>
       <div className="container investigation-detail-page">
         <header className="investigation-detail-header">
+          <Link className="investigation-back" to="/investigate">
+            <span aria-hidden="true">←</span> All investigations
+          </Link>
           <p className="investigation-eyebrow">User-supplied hypothesis</p>
           <h1>{investigation.query}</h1>
           {investigation.description ? (
@@ -419,8 +428,8 @@ export function InvestigationDetailPage() {
           <section className="investigation-run-card" aria-labelledby="run-progress-title">
             <div className="investigation-run-header">
               <div>
-                <p className="investigation-eyebrow">Latest run</p>
-                <h2 id="run-progress-title">Measured progress</h2>
+                <p className="investigation-eyebrow">Investigation journey</p>
+                <h2 id="run-progress-title">Hypothesis → evidence</h2>
               </div>
               <span
                 className={`investigation-run-status${run.is_terminal ? " is-terminal" : ""}`}
@@ -441,6 +450,24 @@ export function InvestigationDetailPage() {
               </p>
             ) : null}
 
+            <dl className="investigation-summary" aria-label="Measured investigation summary">
+              <div>
+                <dt>Academic research</dt>
+                <dd>{run.phases.research.matched}</dd>
+                <span>relevant papers</span>
+              </div>
+              <div>
+                <dt>Demand evidence</dt>
+                <dd>{run.phases.demand.accepted}</dd>
+                <span>accepted</span>
+              </div>
+              <div>
+                <dt>Competitor candidates</dt>
+                <dd>{run.phases.competitors.accepted}</dd>
+                <span>accepted</span>
+              </div>
+            </dl>
+
             <InvestigationProgress run={run} />
 
             {run.is_retryable ? (
@@ -459,18 +486,25 @@ export function InvestigationDetailPage() {
         {run?.is_terminal ? (
           <section className="investigation-results-status" aria-labelledby="result-load-title">
             <div>
-              <p className="investigation-eyebrow">Persisted results</p>
-              <h2 id="result-load-title">Result surfaces</h2>
-              <p>Each surface loads independently when the run finishes.</p>
+              <p className="investigation-eyebrow">Evidence workspace</p>
+              <h2 id="result-load-title">Inspect the persisted results</h2>
+              <p>Move from research to market evidence, then test the competitive gap.</p>
             </div>
             <div className="investigation-surface-list">
-              {resultSurfaces.map((surface) => (
-                <div key={surface.label}>
+              {resultSurfaces.map((surface, index) => (
+                <a
+                  key={surface.label}
+                  href={[
+                    "#investigation-research-title",
+                    "#demand-evidence-title",
+                    "#competitor-candidates-title",
+                  ][index]}
+                >
                   <span>{surface.label}</span>
                   <strong className={`is-${surface.status}`}>
                     {surfaceStatusLabel(surface.status)}
                   </strong>
-                </div>
+                </a>
               ))}
             </div>
           </section>

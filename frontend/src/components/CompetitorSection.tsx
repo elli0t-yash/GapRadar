@@ -28,10 +28,12 @@ const GROUPS: ReadonlyArray<{
 ];
 
 function Provenance({ queries }: { queries: string[] }) {
-  if (queries.length <= 1) return null;
+  if (queries.length === 0) return null;
   return (
     <details className="evidence-provenance">
-      <summary>Found across {queries.length} search directions</summary>
+      <summary>
+        Found across {queries.length} search direction{queries.length === 1 ? "" : "s"}
+      </summary>
       <ul>
         {queries.map((query) => (
           <li key={query}>{query}</li>
@@ -53,10 +55,13 @@ function CompetitorCard({ competitor }: { competitor: CompetitorEvidence }) {
       <h4>{competitor.name}</h4>
       <p className="evidence-domain">{competitor.domain}</p>
       <p className="evidence-snippet">{competitor.snippet}</p>
-      <p className="evidence-reason">{competitor.reason}</p>
+      <div className="evidence-reason">
+        <strong>Why GapRadar classified this</strong>
+        <p>{competitor.reason}</p>
+      </div>
       <Provenance queries={competitor.provenance.found_by_queries} />
       <a href={competitor.url} target="_blank" rel="noreferrer">
-        View source ↗
+        Open source <span aria-hidden="true">↗</span>
       </a>
     </li>
   );
@@ -97,6 +102,10 @@ export function CompetitorSection({
       {visibleCount === 0 ? (
         <div className="investigation-result-empty">
           <h3>No competitor candidates were accepted from this discovery pass.</h3>
+          <p>
+            This is a valid zero result, not a complete competitive-landscape
+            claim.
+          </p>
         </div>
       ) : null}
 
