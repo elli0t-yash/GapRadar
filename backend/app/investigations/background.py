@@ -1,19 +1,19 @@
 """The LOCAL executor for investigation runs. Not a job queue.
 
 What this is: a way to run a claimed investigation in this process after
-the HTTP response has been sent, so `POST /investigations/{id}/run`
-returns in milliseconds while the Bright Data searches and the semantic
-judging take as long as they take.
+FastAPI has sent its HTTP response or MCP has returned its accepted claim.
+Both interfaces therefore return quickly while the Bright Data searches
+and semantic judging take as long as they take.
 
-What this is NOT: durable. This runs on FastAPI's BackgroundTasks, which
-is an in-process task and nothing more. IF RAILWAY RESTARTS MID-RUN the
-task is gone, the Bright Data jobs keep running remotely and their
-results are never collected, and the row is left QUEUED or RUNNING. There
-is no retry and no broker, and pretending otherwise would be worse than
-the honest limitation. `reconcile_stale_investigation_runs` is what makes
-such a row terminal again so the user can retry -- without it, the
-partial unique index would leave that investigation permanently
-un-runnable.
+What this is NOT: durable. FastAPI uses BackgroundTasks and local MCP uses
+the bounded thread pool below; both live only in this process. IF RAILWAY
+RESTARTS MID-RUN the task is gone, the Bright Data jobs keep running
+remotely and their results are never collected, and the row is left QUEUED
+or RUNNING. There is no retry and no broker, and pretending otherwise
+would be worse than the honest limitation.
+`reconcile_stale_investigation_runs` is what makes such a row terminal
+again so the user can retry -- without it, the partial unique index would
+leave that investigation permanently un-runnable.
 
 What makes that survivable is that the run's state is PERSISTED and the
 work is idempotent: papers upsert by arxiv_id and matches upsert by
@@ -28,8 +28,23 @@ called.
 
 import logging
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+# MCP has no FastAPI BackgroundTasks object. A small bounded pool preserves the
+# existing in-process architecture while keeping a provider-spending tool call
+# from blocking until the full Investigation finishes. Threads are created only
+# after the first explicit run action.
+_MCP_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="gapradar-investigation",
+)
+
+
+def schedule_investigation_run(run_id: uuid.UUID) -> None:
+    """Submit one claimed run to the local executor and return immediately."""
+    _MCP_EXECUTOR.submit(execute_investigation_run, run_id)
 
 
 def execute_investigation_run(run_id: uuid.UUID) -> None:

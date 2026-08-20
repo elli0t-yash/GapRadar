@@ -1,0 +1,1 @@
+"""Persisted dashboard read composition."""
