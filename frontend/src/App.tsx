@@ -3,6 +3,8 @@ import { Route, Routes } from "react-router-dom";
 import { GapRadarPage } from "./pages/GapRadarPage";
 import { ComingSoonPage } from "./pages/ComingSoonPage";
 import { ReliabilityPage } from "./pages/ReliabilityPage";
+import { InvestigatePage } from "./pages/InvestigatePage";
+import { InvestigationDetailPage } from "./pages/InvestigationDetailPage";
 import { ScrapingIntro } from "./components/ScrapingIntro";
 
 function App() {
@@ -35,6 +37,11 @@ function App() {
           }
         />
         <Route path="/reliability" element={<ReliabilityPage />} />
+        <Route path="/investigate" element={<InvestigatePage />} />
+        <Route
+          path="/investigations/:investigationId"
+          element={<InvestigationDetailPage />}
+        />
       </Routes>
     </>
   );

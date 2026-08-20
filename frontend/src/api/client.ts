@@ -96,13 +96,21 @@ export async function apiGet<T>(
 
 export async function apiPost<T>(
   path: string,
-  options: { signal?: AbortSignal } = {},
+  options: { body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
+  // A body is optional: most POSTs here are claims ("run this"), which
+  // carry nothing. Content-Type is set only when there IS a body --
+  // sending it on an empty request makes some proxies expect one.
+  const hasBody = options.body !== undefined;
+
   let response: Response;
   try {
     response = await fetch(`${API_V1}${path}`, {
       method: "POST",
-      headers: { Accept: "application/json" },
+      headers: hasBody
+        ? { Accept: "application/json", "Content-Type": "application/json" }
+        : { Accept: "application/json" },
+      body: hasBody ? JSON.stringify(options.body) : undefined,
       signal: options.signal,
     });
   } catch (cause) {

@@ -1,0 +1,131 @@
+/* Phase progress, in the same warm cream/orange language as the rest of
+   the app. No new palette: every colour is an existing token. */
+
+.investigation-progress {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ip-phase {
+  padding: var(--space-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.ip-phase-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ip-phase-title {
+  margin: 0;
+  flex: 1;
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.ip-mark {
+  width: 20px;
+  text-align: center;
+  font-size: var(--fs-base);
+  color: var(--text-muted);
+}
+
+.ip-state {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ip-phase.is-complete .ip-mark { color: #2f8f5b; }
+.ip-phase.is-complete .ip-state {
+  background: rgba(47, 143, 91, 0.1);
+  border-color: rgba(47, 143, 91, 0.28);
+  color: #226d44;
+}
+
+.ip-phase.is-running .ip-mark { color: var(--accent); }
+.ip-phase.is-running .ip-state {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+
+/* PARTIAL IS A WARNING, NOT A FAILURE. It carries real results. */
+.ip-phase.is-partial { border-color: rgba(200, 130, 0, 0.35); }
+.ip-phase.is-partial .ip-mark { color: #b57400; }
+.ip-phase.is-partial .ip-state {
+  background: rgba(200, 130, 0, 0.1);
+  border-color: rgba(200, 130, 0, 0.3);
+  color: #8f5c00;
+}
+
+.ip-phase.is-failed { border-color: rgba(179, 47, 47, 0.3); }
+.ip-phase.is-failed .ip-mark { color: #b32f2f; }
+.ip-phase.is-failed .ip-state {
+  background: rgba(179, 47, 47, 0.08);
+  border-color: rgba(179, 47, 47, 0.26);
+  color: #922727;
+}
+
+.ip-phase.is-skipped { opacity: 0.72; }
+
+.ip-note {
+  margin: var(--space-2) 0 0;
+  padding-left: 28px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.ip-rows {
+  margin-top: var(--space-2);
+  padding-left: 28px;
+  display: grid;
+  gap: 2px;
+}
+
+.ip-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+}
+
+.ip-row-label {
+  color: var(--text-muted);
+}
+
+/* The dotted leader keeps label and value tied together on wide rows
+   without a table, which is what lets the row stack on narrow screens. */
+.ip-row-label::after {
+  content: "";
+  display: inline-block;
+  width: 100%;
+}
+
+.ip-row {
+  justify-content: space-between;
+}
+
+.ip-row-value {
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .ip-rows,
+  .ip-note {
+    padding-left: 0;
+  }
+}
