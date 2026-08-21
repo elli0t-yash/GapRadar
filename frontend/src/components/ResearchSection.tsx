@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   ResearchEnrichmentStatus,
   ResearchIntelligence,
@@ -365,12 +366,12 @@ export function ResearchSection({
   /** Runs ONLY from the button below. Never from an effect. */
   onAnalyse: () => void;
 }) {
+  // Collapsed to the strongest match by default; the reveal is a plain
+  // client-side slice of the papers already fetched, not a new request.
+  const [papersExpanded, setPapersExpanded] = useState(false);
+
   return (
     <section className="research-section" aria-labelledby="research-heading">
-      <h3 id="research-heading" className="research-heading">
-        Research intelligence
-      </h3>
-
       {loading && (
         <div className="research-skeleton" aria-busy="true" aria-live="polite">
           <span className="research-skeleton-line" />
@@ -467,17 +468,32 @@ export function ResearchSection({
               )}
 
               <ul className="research-papers">
-                {research.top_papers.map((paper) => (
+                {(papersExpanded
+                  ? research.top_papers
+                  : research.top_papers.slice(0, 1)
+                ).map((paper) => (
                   <PaperCard key={paper.research_paper_id} paper={paper} />
                 ))}
               </ul>
 
-              {research.matched_paper_count > research.top_papers.length && (
-                <p className="research-footnote">
-                  Showing the top {research.top_papers.length} of{" "}
-                  {research.matched_paper_count} relevant papers.
-                </p>
+              {!papersExpanded && research.top_papers.length > 1 && (
+                <button
+                  type="button"
+                  className="research-show-more"
+                  onClick={() => setPapersExpanded(true)}
+                >
+                  Show {research.top_papers.length - 1} more paper
+                  {research.top_papers.length - 1 === 1 ? "" : "s"}
+                </button>
               )}
+
+              {papersExpanded &&
+                research.matched_paper_count > research.top_papers.length && (
+                  <p className="research-footnote">
+                    Showing the top {research.top_papers.length} of{" "}
+                    {research.matched_paper_count} relevant papers.
+                  </p>
+                )}
             </>
           )}
         </>

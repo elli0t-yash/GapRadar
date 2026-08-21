@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   DemandClassification,
   DemandEvidence,
@@ -92,6 +93,7 @@ export function DemandEvidenceSection({
   collection: DemandEvidenceCollection;
   partial: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const visibleCount = GROUPS.reduce(
     (total, group) =>
       total +
@@ -103,60 +105,83 @@ export function DemandEvidenceSection({
 
   return (
     <section className="investigation-result-section evidence-section" aria-labelledby="demand-evidence-title">
-      <header className="investigation-result-heading">
+      <button
+        type="button"
+        className="investigation-result-heading investigation-result-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
         <div>
           <p className="investigation-result-eyebrow">Market signals</p>
           <h2 id="demand-evidence-title">Demand evidence</h2>
         </div>
-      </header>
+        <svg
+          className={`investigation-result-chevron${open ? " is-open" : ""}`}
+          viewBox="0 0 20 20"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M5 7l5 6 5-6"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
 
-      {partial ? (
-        <p className="investigation-result-warning">
-          Demand discovery was partial. The evidence below remains usable and
-          comes from the searches that succeeded.
-        </p>
+      {open ? (
+        <>
+          {partial ? (
+            <p className="investigation-result-warning">
+              Demand discovery was partial. The evidence below remains usable and
+              comes from the searches that succeeded.
+            </p>
+          ) : null}
+
+          {visibleCount === 0 ? (
+            <div className="investigation-result-empty">
+              <h3>
+                No supporting or contradicting demand evidence was accepted from
+                this discovery pass.
+              </h3>
+              <p>
+                The completed pass did not produce evidence for or against the
+                hypothesis on this surface.
+              </p>
+            </div>
+          ) : null}
+
+          {GROUPS.map((group) => {
+            const evidence = collection.evidence.filter(
+              (item) => item.classification === group.classification,
+            );
+            if (evidence.length === 0) return null;
+
+            return (
+              <section
+                key={group.classification}
+                className={`evidence-group is-${group.classification}`}
+                aria-labelledby={`demand-${group.classification}-title`}
+              >
+                <header>
+                  <div>
+                    <h3 id={`demand-${group.classification}-title`}>{group.label}</h3>
+                    <p>{group.description}</p>
+                  </div>
+                  <span>{evidence.length}</span>
+                </header>
+                <ul className="evidence-card-list">
+                  {evidence.map((item) => (
+                    <EvidenceCard key={item.id} evidence={item} />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </>
       ) : null}
-
-      {visibleCount === 0 ? (
-        <div className="investigation-result-empty">
-          <h3>
-            No supporting or contradicting demand evidence was accepted from
-            this discovery pass.
-          </h3>
-          <p>
-            The completed pass did not produce evidence for or against the
-            hypothesis on this surface.
-          </p>
-        </div>
-      ) : null}
-
-      {GROUPS.map((group) => {
-        const evidence = collection.evidence.filter(
-          (item) => item.classification === group.classification,
-        );
-        if (evidence.length === 0) return null;
-
-        return (
-          <section
-            key={group.classification}
-            className={`evidence-group is-${group.classification}`}
-            aria-labelledby={`demand-${group.classification}-title`}
-          >
-            <header>
-              <div>
-                <h3 id={`demand-${group.classification}-title`}>{group.label}</h3>
-                <p>{group.description}</p>
-              </div>
-              <span>{evidence.length}</span>
-            </header>
-            <ul className="evidence-card-list">
-              {evidence.map((item) => (
-                <EvidenceCard key={item.id} evidence={item} />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
     </section>
   );
 }
