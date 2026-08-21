@@ -1,0 +1,136 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="RU7WAia3WQyQpXbjmqje">
+    <mxGraphModel dx="1414" dy="790" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-1" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;" value="&lt;b&gt;GapRadar — Technical Architecture&lt;/b&gt;&lt;br&gt;Trust-Aware Market Gap Discovery &amp; Investigation Platform&lt;br&gt;&lt;i&gt;“Find what the market is missing.”&lt;/i&gt;" vertex="1">
+          <mxGeometry height="80" width="1500" x="20" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-2" parent="1" style="swimlane;horizontal=0;startSize=30;html=1;" value="1. USER &amp; AGENT INTERFACES" vertex="1">
+          <mxGeometry height="240" width="1500" x="20" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-3" parent="ZS036VT1J7T7Ae4wofm7-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#FF6A00;fontColor=#242424;" value="&lt;b&gt;WEB APPLICATION&lt;/b&gt;&lt;br&gt;React 19 + TypeScript + Vite&lt;br&gt;Deployed on Vercel&lt;br&gt;&lt;br&gt;Opportunity Discovery • Opportunity Detail&lt;br&gt;Research Intelligence • Reliability / RecallGuard&lt;br&gt;Independent Investigations • Light / Dark Mode" vertex="1">
+          <mxGeometry height="150" width="300" x="40" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-4" parent="ZS036VT1J7T7Ae4wofm7-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#FF6A00;fontColor=#242424;" value="&lt;b&gt;GAPRADAR MCP&lt;/b&gt;&lt;br&gt;Official MCP Python SDK v2&lt;br&gt;17 tools&lt;br&gt;Opportunity • Reliability • Investigation Intelligence&lt;br&gt;create_investigation • run_investigation&lt;br&gt;&lt;br&gt;&lt;b&gt;Streamable HTTP | Bearer Auth | /mcp&lt;/b&gt;" vertex="1">
+          <mxGeometry height="150" width="320" x="400" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-5" parent="ZS036VT1J7T7Ae4wofm7-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe0c2;strokeColor=#FF6A00;html=1;" value="Codex / Claude / AI Agents" vertex="1">
+          <mxGeometry height="40" width="260" x="430" y="5" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-6" parent="ZS036VT1J7T7Ae4wofm7-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#FF6A00;html=1;" value="&lt;b&gt;CLI — gapradar&lt;/b&gt;&lt;br&gt;Click 8.4&lt;br&gt;overview • opportunities • reliability&lt;br&gt;investigations • --json • status --watch&lt;br&gt;&lt;br&gt;&lt;b&gt;CLI is an MCP client&lt;/b&gt;" vertex="1">
+          <mxGeometry height="150" width="280" x="780" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;html=1;" value="&lt;b&gt;REST API&lt;/b&gt;&lt;br&gt;/api/v1/opportunities&lt;br&gt;/api/v1/investigations&lt;br&gt;/api/v1/reliability&lt;br&gt;/api/v1/dashboard&lt;br&gt;/api/v1/pipeline" vertex="1">
+          <mxGeometry height="125" width="260" x="20" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-8" parent="1" style="swimlane;horizontal=0;startSize=30;html=1;" value="2. APPLICATION &amp; INTELLIGENCE LAYER&lt;br&gt;&lt;b&gt;FastAPI • Python • Railway&lt;/b&gt;" vertex="1">
+          <mxGeometry height="440" width="1500" x="20" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-9" parent="ZS036VT1J7T7Ae4wofm7-8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#6c8ebf;html=1;" value="&lt;b&gt;OPPORTUNITY INTELLIGENCE — Discovery Mode&lt;/b&gt;&lt;br&gt;Trusted Market Signals → Opportunity Detection → Scoring &amp; Ranking → Persisted Opportunities" vertex="1">
+          <mxGeometry height="95" width="350" x="300" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-10" parent="ZS036VT1J7T7Ae4wofm7-8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#6c8ebf;html=1;" value="&lt;b&gt;INDEPENDENT INVESTIGATION ENGINE — Investigation Mode&lt;/b&gt;&lt;br&gt;User Hypothesis → Investigation Planner → parallel Research / Demand / Competition → Persisted Evidence&lt;br&gt;&lt;br&gt;one active run per investigation • partial results preserved&lt;br&gt;backend owns is_terminal • backend owns is_retryable" vertex="1">
+          <mxGeometry height="125" width="390" x="700" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-11" parent="ZS036VT1J7T7Ae4wofm7-8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#6c8ebf;html=1;" value="&lt;b&gt;RESEARCH INTELLIGENCE&lt;/b&gt;&lt;br&gt;Query Planning → Paper Discovery → Candidate Selection → Semantic Judgment → Research Matches&lt;br&gt;&lt;br&gt;deterministic planning first • OpenAI fallback&lt;br&gt;shared by Opportunities + Investigations" vertex="1">
+          <mxGeometry height="115" width="350" x="300" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-12" parent="ZS036VT1J7T7Ae4wofm7-8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#6c8ebf;html=1;" value="&lt;b&gt;WEB INTELLIGENCE&lt;/b&gt;&lt;br&gt;Demand Query Planning + Competitor Query Planning → Bright Data SERP → Normalization → Semantic Classification → Evidence Persistence&lt;br&gt;&lt;br&gt;1 query = 1 SERP request • bounded search fan-out • no N+1 result-page crawling in discovery" vertex="1">
+          <mxGeometry height="115" width="390" x="700" y="205" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-13" parent="ZS036VT1J7T7Ae4wofm7-8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#6c8ebf;html=1;" value="&lt;b&gt;MCP SERVER MODULE&lt;/b&gt;&lt;br&gt;exposes 17 tools&lt;br&gt;Opportunity reads • Reliability reads&lt;br&gt;Investigation reads&lt;br&gt;create_investigation • run_investigation" vertex="1">
+          <mxGeometry height="100" width="260" x="1140" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-14" parent="ZS036VT1J7T7Ae4wofm7-8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff4e8;strokeColor=#d79b62;html=1;" value="&lt;b&gt;AUTOMATION &amp; EXECUTION&lt;/b&gt;&lt;br&gt;Daily Market Refresh: Railway Cron 06:00 IST → Market Collector → Pipeline → Opportunity Refresh&lt;br&gt;&lt;br&gt;Investigation Background: Run Claimed → Research + SERP Execution → Semantic Judging → Persistence → Terminal Status&lt;br&gt;&lt;br&gt;Private DATABASE_URL • bounded in-process execution • no Redis / Kafka / Celery" vertex="1">
+          <mxGeometry height="130" width="260" x="1140" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-15" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;" value="&lt;b&gt;3. PERSISTENCE LAYER&lt;/b&gt;&lt;br&gt;&lt;b&gt;Railway PostgreSQL — Primary Database&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;MARKET DISCOVERY&lt;/b&gt; sources • collectors • signals • opportunities&lt;br&gt;&lt;b&gt;RESEARCH&lt;/b&gt; research_papers • research_search_runs • opportunity_research_matches&lt;br&gt;&lt;b&gt;INVESTIGATIONS&lt;/b&gt; investigations • investigation_runs • investigation_research_matches&lt;br&gt;&lt;b&gt;WEB EVIDENCE&lt;/b&gt; investigation_web_search_runs • investigation_web_search_hits • investigation_demand_evidence • investigation_competitors&lt;br&gt;&lt;b&gt;RELIABILITY&lt;/b&gt; reliability incidents • RecallGuard proofs • historical Bright Data evidence&lt;br&gt;&lt;br&gt;Persistent evidence + provenance + execution state" vertex="1">
+          <mxGeometry height="260" width="900" x="20" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-16" parent="1" style="swimlane;horizontal=0;startSize=30;html=1;" value="4. EXTERNAL INTELLIGENCE &amp; DATA ACQUISITION" vertex="1">
+          <mxGeometry height="300" width="900" x="20" y="1190" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-17" parent="ZS036VT1J7T7Ae4wofm7-16" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#FF6A00;html=1;" value="&lt;b&gt;BRIGHT DATA — SCRAPER STUDIO&lt;/b&gt;&lt;br&gt;market signal collection&lt;br&gt;custom scraper • structured extraction" vertex="1">
+          <mxGeometry height="90" width="250" x="35" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-18" parent="ZS036VT1J7T7Ae4wofm7-16" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#FF6A00;html=1;" value="&lt;b&gt;BRIGHT DATA — SERP API&lt;/b&gt;&lt;br&gt;demand discovery • competitor discovery&lt;br&gt;Organic fields: title, URL, domain, snippet, position&lt;br&gt;bounded requests; no result-page crawling in discovery" vertex="1">
+          <mxGeometry height="105" width="260" x="320" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-19" parent="ZS036VT1J7T7Ae4wofm7-16" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#6c8ebf;html=1;" value="&lt;b&gt;arXiv&lt;/b&gt;&lt;br&gt;optimized academic listing collection&lt;br&gt;paper metadata • academic discovery" vertex="1">
+          <mxGeometry height="90" width="220" x="615" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-20" parent="ZS036VT1J7T7Ae4wofm7-16" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#6c8ebf;html=1;" value="&lt;b&gt;OpenAI&lt;/b&gt;&lt;br&gt;research query fallback • semantic matching&lt;br&gt;evidence classification • reason generation&lt;br&gt;&lt;i&gt;not the final decision-maker&lt;/i&gt;" vertex="1">
+          <mxGeometry height="85" width="260" x="320" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-21" parent="1" style="swimlane;horizontal=0;startSize=30;strokeWidth=3;html=1;" value="5. RECALLGUARD — TRUST BOUNDARY" vertex="1">
+          <mxGeometry height="610" width="560" x="960" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-22" parent="ZS036VT1J7T7Ae4wofm7-21" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#FF6A00;strokeWidth=2;html=1;" value="Provider Extraction → Raw Structured Record → Extraction Quality Monitor → Semantic / Schema Drift Detection → Incident Classification → Repair Candidate → Validation&lt;br&gt;&lt;br&gt;Validation: Schema PASS • Semantics PASS • Source Fidelity PASS&lt;br&gt;&lt;br&gt;→ Decision: APPROVE / REJECT / RETRY&lt;br&gt;→ Trusted Projection → Opportunity Engine" vertex="1">
+          <mxGeometry height="250" width="490" x="35" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-23" parent="ZS036VT1J7T7Ae4wofm7-21" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe0c2;strokeColor=#FF6A00;html=1;" value="Controlled fixture: deterministic self-healing proof&lt;br&gt;&lt;br&gt;Live Bright Data: real extraction-drift detection + safety rejection proof&lt;br&gt;&lt;br&gt;&lt;b&gt;Not fully autonomous live-site self-healing&lt;/b&gt;" vertex="1">
+          <mxGeometry height="110" width="490" x="35" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-24" parent="1" style="swimlane;horizontal=0;startSize=30;html=1;" value="END-TO-END FLOWS" vertex="1">
+          <mxGeometry height="220" width="1500" x="20" y="1530" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-25" parent="ZS036VT1J7T7Ae4wofm7-24" style="text;whiteSpace=wrap;html=1;fontColor=#242424;fontSize=14;" value="① &lt;b&gt;MARKET GAP DISCOVERY&lt;/b&gt; — Web Source → Bright Data Scraper → RecallGuard → Trusted Signal → Opportunity Engine → Ranked Opportunity → Web / MCP / CLI&lt;br&gt;&lt;br&gt;② &lt;b&gt;RESEARCH INTELLIGENCE&lt;/b&gt; — Opportunity / Investigation → Query Planner → arXiv → Candidate Papers → Semantic Matcher → Persisted Research&lt;br&gt;&lt;br&gt;③ &lt;b&gt;INDEPENDENT INVESTIGATION&lt;/b&gt; — User Hypothesis → Investigation → Planner → Research + Demand + Competition → Evidence → Web / MCP / CLI&lt;br&gt;&lt;br&gt;④ &lt;b&gt;RELIABILITY FLOW&lt;/b&gt; — Extraction → Monitor → Drift → Validate → Decision → Trusted Data&lt;br&gt;&lt;br&gt;&lt;b&gt;Legend:&lt;/b&gt; solid black = normal request/data flow • dashed black = background/orchestration • orange = trust/validation/RecallGuard" vertex="1">
+          <mxGeometry height="160" width="1420" x="30" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-26" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-27" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-28" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-29" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-9" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-30" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-11" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-31" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-11" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-32" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-12" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-33" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-21" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-34" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-18" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-12" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-35" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-11" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-36" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-11" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-37" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-12" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-38" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-15" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-39" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-15" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-40" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-9" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-41" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-9" value="background">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZS036VT1J7T7Ae4wofm7-42" edge="1" parent="1" source="ZS036VT1J7T7Ae4wofm7-14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;endArrow=classic;html=1;" target="ZS036VT1J7T7Ae4wofm7-10" value="background">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
