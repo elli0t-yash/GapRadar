@@ -339,11 +339,15 @@ export function ResearchSection({
   enrichmentStarting,
   enrichmentWarning,
   onAnalyse,
+  showHeading = true,
 }: {
   research: ResearchIntelligence | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  /** False when an ancestor (e.g. a collapsible wrapper) already renders
+   *  the "Research intelligence" title. */
+  showHeading?: boolean;
   /**
    * The backend job's state, or null when analysis has never been asked
    * for. Purely reflected -- this component never starts work itself.
@@ -366,10 +370,15 @@ export function ResearchSection({
   onAnalyse: () => void;
 }) {
   return (
-    <section className="research-section" aria-labelledby="research-heading">
-      <h3 id="research-heading" className="research-heading">
-        Research intelligence
-      </h3>
+    <section
+      className="research-section"
+      aria-labelledby={showHeading ? "research-heading" : undefined}
+    >
+      {showHeading && (
+        <h3 id="research-heading" className="research-heading">
+          Research intelligence
+        </h3>
+      )}
 
       {loading && (
         <div className="research-skeleton" aria-busy="true" aria-live="polite">

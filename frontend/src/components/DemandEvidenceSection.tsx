@@ -3,6 +3,7 @@ import type {
   DemandEvidence,
   DemandEvidenceCollection,
 } from "../api/investigationTypes";
+import { InvestigationResultSection } from "./InvestigationResultSection";
 import "./InvestigationEvidenceSections.css";
 
 const GROUPS: ReadonlyArray<{
@@ -102,14 +103,12 @@ export function DemandEvidenceSection({
   );
 
   return (
-    <section className="investigation-result-section evidence-section" aria-labelledby="demand-evidence-title">
-      <header className="investigation-result-heading">
-        <div>
-          <p className="investigation-result-eyebrow">Market signals</p>
-          <h2 id="demand-evidence-title">Demand evidence</h2>
-        </div>
-      </header>
-
+    <InvestigationResultSection
+      id="demand-evidence-title"
+      eyebrow="Market signals"
+      title="Demand evidence"
+      extraClassName="evidence-section"
+    >
       {partial ? (
         <p className="investigation-result-warning">
           Demand discovery was partial. The evidence below remains usable and
@@ -157,6 +156,6 @@ export function DemandEvidenceSection({
           </section>
         );
       })}
-    </section>
+    </InvestigationResultSection>
   );
 }

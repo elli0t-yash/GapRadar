@@ -2,6 +2,7 @@ import type {
   InvestigationPaperMatch,
   InvestigationResearchIntelligence,
 } from "../api/investigationTypes";
+import { InvestigationResultSection } from "./InvestigationResultSection";
 import "./InvestigationResearchSection.css";
 
 function formatPublished(date: string): string {
@@ -84,14 +85,11 @@ export function InvestigationResearchSection({
   partial: boolean;
 }) {
   return (
-    <section className="investigation-result-section" aria-labelledby="investigation-research-title">
-      <header className="investigation-result-heading">
-        <div>
-          <p className="investigation-result-eyebrow">Research frontier</p>
-          <h2 id="investigation-research-title">Relevant academic research</h2>
-        </div>
-      </header>
-
+    <InvestigationResultSection
+      id="investigation-research-title"
+      eyebrow="Research frontier"
+      title="Relevant academic research"
+    >
       {partial ? (
         <p className="investigation-result-warning">
           Research discovery was partial. These are the persisted matches from
@@ -144,6 +142,6 @@ export function InvestigationResearchSection({
           Showing {research.top_papers.length} of {research.matched_paper_count} relevant papers.
         </p>
       ) : null}
-    </section>
+    </InvestigationResultSection>
   );
 }

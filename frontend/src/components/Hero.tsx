@@ -150,6 +150,15 @@ export function Hero({
             <button
               type="button"
               className={
+                category === "Top Picks" ? "hero-chip is-active" : "hero-chip"
+              }
+              onClick={() => onCategoryChange("Top Picks")}
+            >
+              Top picks
+            </button>
+            <button
+              type="button"
+              className={
                 category === "All" ? "hero-chip is-active" : "hero-chip"
               }
               onClick={() => onCategoryChange("All")}

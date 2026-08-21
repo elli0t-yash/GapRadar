@@ -18,6 +18,7 @@ import type {
 import { isEnrichmentTerminal } from "../api/types";
 import type { Problem } from "../types";
 import { ResearchSection } from "./ResearchSection";
+import { CollapsibleSection } from "./CollapsibleSection";
 import { formatRelativeDate } from "../utils/formatDate";
 import "./ProblemDetail.css";
 
@@ -392,9 +393,7 @@ export function ProblemDetail({
           </p>
         </section>
 
-        <section className="problem-detail-section" aria-labelledby="problem-evidence-title">
-          <p className="problem-detail-section-label">Source trail</p>
-          <h3 id="problem-evidence-title">Evidence</h3>
+        <CollapsibleSection label="Source trail" title="Evidence">
           <div className="problem-detail-evidence-row">
             <div>
               <strong>{detail.source ?? "Persisted source"}</strong>
@@ -411,7 +410,7 @@ export function ProblemDetail({
               </a>
             )}
           </div>
-        </section>
+        </CollapsibleSection>
 
         {hasScoreBreakdown ? (
           <details className="problem-detail-breakdown">
@@ -441,12 +440,7 @@ export function ProblemDetail({
           </details>
         ) : null}
 
-        <section
-          className="problem-detail-section is-reliability"
-          aria-labelledby="problem-reliability-title"
-        >
-          <p className="problem-detail-section-label">Source health</p>
-          <h3 id="problem-reliability-title">Reliability</h3>
+        <CollapsibleSection label="Source health" title="Reliability">
           <div className="problem-detail-reliability-row">
             <span aria-hidden="true">✓</span>
             <div>
@@ -458,23 +452,26 @@ export function ProblemDetail({
             </div>
             <Link to="/reliability">Inspect RecallGuard <span aria-hidden="true">→</span></Link>
           </div>
-        </section>
+        </CollapsibleSection>
 
-        <ResearchSection
-          research={research}
-          loading={researchLoading}
-          error={researchError}
-          onRetry={retryResearch}
-          enrichmentStatus={enrichmentStatus}
-          enrichmentError={enrichmentError}
-          enrichmentQueryStates={enrichmentQueryStates}
-          enrichmentCounters={enrichmentCounters}
-          enrichmentOutcomeReason={enrichmentOutcomeReason}
-          enrichmentIsRetryable={enrichmentIsRetryable}
-          enrichmentStarting={enrichmentStarting}
-          enrichmentWarning={enrichmentWarning}
-          onAnalyse={analyse}
-        />
+        <CollapsibleSection title="Research intelligence">
+          <ResearchSection
+            research={research}
+            loading={researchLoading}
+            error={researchError}
+            onRetry={retryResearch}
+            enrichmentStatus={enrichmentStatus}
+            enrichmentError={enrichmentError}
+            enrichmentQueryStates={enrichmentQueryStates}
+            enrichmentCounters={enrichmentCounters}
+            enrichmentOutcomeReason={enrichmentOutcomeReason}
+            enrichmentIsRetryable={enrichmentIsRetryable}
+            enrichmentStarting={enrichmentStarting}
+            enrichmentWarning={enrichmentWarning}
+            onAnalyse={analyse}
+            showHeading={false}
+          />
+        </CollapsibleSection>
       </div>
     </div>
   );

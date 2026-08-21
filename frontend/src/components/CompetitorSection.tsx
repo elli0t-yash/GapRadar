@@ -3,6 +3,7 @@ import type {
   CompetitorCollection,
   CompetitorEvidence,
 } from "../api/investigationTypes";
+import { InvestigationResultSection } from "./InvestigationResultSection";
 import "./InvestigationEvidenceSections.css";
 
 const GROUPS: ReadonlyArray<{
@@ -84,14 +85,12 @@ export function CompetitorSection({
   );
 
   return (
-    <section className="investigation-result-section evidence-section" aria-labelledby="competitor-candidates-title">
-      <header className="investigation-result-heading">
-        <div>
-          <p className="investigation-result-eyebrow">Product discovery</p>
-          <h2 id="competitor-candidates-title">Competitor candidates</h2>
-        </div>
-      </header>
-
+    <InvestigationResultSection
+      id="competitor-candidates-title"
+      eyebrow="Product discovery"
+      title="Competitor candidates"
+      extraClassName="evidence-section"
+    >
       {partial ? (
         <p className="investigation-result-warning">
           Competitor discovery was partial. These candidates are the persisted
@@ -136,6 +135,6 @@ export function CompetitorSection({
           </section>
         );
       })}
-    </section>
+    </InvestigationResultSection>
   );
 }
