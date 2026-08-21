@@ -2,11 +2,13 @@ import { NavLink, useLocation } from "react-router-dom";
 import { ThemeToggle } from "./ThemeToggle";
 import "./Navbar.css";
 
+// Deliberately three. /trends and /saved still route, they are simply not
+// promoted to the primary nav -- the landing page points at the surfaces
+// that actually hold intelligence.
 const NAV_ITEMS = [
+  { to: "/opportunities", label: "Opportunities" },
   { to: "/investigate", label: "Investigate" },
-  { to: "/trends", label: "Trends" },
   { to: "/reliability", label: "Reliability" },
-  { to: "/saved", label: "Saved" },
 ];
 
 export function Navbar() {
