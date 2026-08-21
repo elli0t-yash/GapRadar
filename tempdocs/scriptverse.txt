@@ -1,0 +1,137 @@
+Internal Checklist
+
+
+Submission Checklist 
+1. Public source-code repository link (accessible, not private) 
+https://github.com/mohitkushwaha0601/GapRadar
+
+
+2. README file that clearly explains the project 
+https://github.com/mohitkushwaha0601/GapRadar/blob/main/README.md
+Readme -> team name and member name , screenshot , steps how to use it , setup guide , commit history and PR's , video demo - 2-3 mins (yt) , Q/A
+Team Name: proof of Chaos
+Members: Yash Mishra, Udit Rawal, Mohit Kushwaha
+Screenshots:
+Use Guide:
+Setup Guide:
+Commit history: https://github.com/mohitkushwaha0601/GapRadar/commits/main/
+Release History: https://github.com/mohitkushwaha0601/GapRadar/releases 
+Pull Request link: https://github.com/mohitkushwaha0601/GapRadar/pulls?q= 
+Video Link:
+FAQ Section: 
+Licence: https://github.com/mohitkushwaha0601/GapRadar?tab=MIT-1-ov-file 
+
+
+3. Example structured output from the scraper (sample data file or output snippet) 
+
+
+
+
+4. Demo video showing the project working end-to-end 
+
+
+
+
+5. Written explanation of how Bright Data Scraper Studio is used in the project 
+
+
+
+
+6. Confirmation that the scraper is custom-built in Scraper Studio (not pulled from the existing Scrapers Library) 
+
+
+
+
+7. Confirmation that all scraped data is publicly available (no private/login-gated/paywalled content) 
+
+
+
+
+8. Disclosure of any AI coding assistants used 
+
+
+9. Team/participant name(s) and track being submitted to clearly stated 
+
+
+10. (Daily Bugle track only) LinkedIn post link, posted during the hackathon and tagged WeMakeDevs
+
+
+
+
+
+
+ 
+GapRadar
+
+
+GapRadar is a radar for market gaps — not just another web scraper. It continuously turns real-world pain signals into ranked opportunities by detecting unmet demand, connecting those signals with emerging research, and examining the competitive landscape. Every opportunity is backed by traceable evidence and protected by a trust layer that detects extraction drift before bad data can influence decisions. GapRadar can also investigate any user-supplied idea independently, combining academic research, demand evidence, and competitor intelligence. 
+
+
+Live URL: https://gap-radar-blush.vercel.app/ 
+GitHub link to project*
+Make sure it's public, and that it has a proper README and a real commit history so judges can see how the project came together.
+https://github.com/mohitkushwaha0601/GapRadar
+YouTube video demo link*
+The video should be not be more than 3 minutes covering how your project reflects the below points:
+* About the project
+* Tech stack and architecture
+* Demo if possible
+* Learning and growth (optional)
+https[a]://
+
+
+What does your project do?*
+[What problem does your project solve, and who is it for?]
+Answer: GapRadar is a trust-aware opportunity intelligence platform that helps people discover what the market is missing and investigate whether an idea is actually worth pursuing. Most founders and product teams validate ideas by manually jumping between search engines, Reddit, research papers, competitor websites, spreadsheets, and AI tools. That process is slow, fragmented, and often produces conclusions without enough evidence. GapRadar brings those signals together.
+In Discovery Mode, it collects real-world problem statements from public sources such as Razorpay’s Fix My Itch, checks the reliability of the scraped data with our RecallGuard layer, and turns the trusted signals into ranked market opportunities. In Investigation Mode, a user can enter any hypothesis. 
+GapRadar then gathers academic evidence from arXiv, demand signals from the public web, and potential competitors using Bright Data. Instead of immediately giving a made-up “good idea / bad idea” score, it shows the evidence it actually found. It is built for founders, product teams, researchers, builders, and innovation teams who need a faster and more evidence-driven way to discover and validate opportunities. 
+
+
+How did you use Scraper Studio in your project?*
+Tell us what you're scraping and how Scraper Studio fits into your project.
+Answer: We use Bright Data Scraper Studio in two core parts of GapRadar. First, for Discovery Mode, we built a custom scraper called gapradar-fix-my-itch for Razorpay’s public Fix My Itch page. It converts the page into structured market-problem records containing fields such as the problem statement, description, industry, Itch Score, severity, TAM, whitespace, frequency, and source URL. 
+That structured data then goes through GapRadar’s validation and RecallGuard reliability layer before reaching the Opportunity Engine. Second, for Investigation Mode, we built another custom Scraper Studio collector called gapradar-arxiv-research-v1. GapRadar dynamically creates arXiv search URLs based on the user’s hypothesis, sends those URLs to the scraper, and receives structured paper data such as title, abstract, authors, categories, publication date, and paper links. 
+The resulting research becomes part of the evidence shown in an Investigation. 
+So the flow is essentially: Public Web → Bright Data Scraper Studio → Structured Data → GapRadar Validation/RecallGuard → Opportunity Intelligence We also use Bright Data SERP API separately for demand evidence and competitor discovery, but we keep that distinct from our custom Scraper Studio collectors. 
+
+
+What was the most frustrating thing you hit while building with Scraper Studio or the CLI?*  
+Answer: The most frustrating part was distinguishing between a bug in our scraper and a restriction or behavior of the platform/source. 
+For example, during early experimentation we tried targets that produced errors such as domain restrictions, including a government-domain test. At first, it was not immediately obvious whether the problem came from our scraper, our configuration, or a Bright Data restriction. 
+We also encountered a more interesting reliability problem where a scraper could technically “succeed” while returning structurally incorrect values. For example, one version emitted a TAM score on the wrong scale. 
+That experience actually influenced GapRadar’s architecture: we decided that a successful scraper run should not automatically mean the data is trustworthy, which led us to put RecallGuard between Bright Data and the Opportunity Engine. 
+Better surfacing of why a run is rejected or restricted, directly where the error occurs, would make debugging much faster. 
+
+
+
+
+
+
+Where did you get stuck for the longest, and what got you unstuck?* 
+Answer: The longest challenge was building a scraper that was not just working for one page load, but was reliable enough for an application to depend on. 
+The arXiv collector was a good example. We needed it to work with dynamic search URLs generated at runtime, correctly navigate the results, extract paper URLs, and produce a consistent schema regardless of the research topic. 
+Similarly, Fix My Itch required us to understand the page structure well enough to extract more than just visible text—we needed stable, structured fields that could feed an opportunity-scoring pipeline. 
+What got us unstuck was breaking the scraper into smaller stages: 
+navigation → extraction → parsing → schema validation → backend validation 
+Using Scraper Studio’s preview, run logs, parser output, and repeated test runs helped us isolate each problem independently. 
+We also stopped trying to silently “fix” malformed scraper output in the backend. If the source says a field should be 1–10 and suddenly returns 70, GapRadar treats that as potential extraction drift rather than guessing what the scraper meant. That decision made the whole pipeline much easier to reason about. 
+
+
+
+
+How was the overall developer experience? What would you change, and anything else you want the Bright Data team to hear? * 
+Answer: Overall, the developer experience was very good, especially once we moved beyond the first scraper and started treating Bright Data as part of the application architecture rather than just a scraping utility. 
+The combination of Scraper Studio + API-triggered runs + SERP API worked particularly well for GapRadar because we needed different kinds of public-web intelligence: structured page extraction, academic research, and broad web search. 
+A few things I would improve: 
+* Make domain/product restrictions more explicit in error messages. 
+* Make the transition from a successful Scraper Studio prototype to a backend/API integration even more obvious in the UI and docs. 
+* Surface output-schema drift more prominently. A scraper returning HTTP success but structurally wrong data is often more dangerous than a scraper that simply fails. 
+* Provide more examples of dynamic-input production scrapers, where the URL/query changes on every API call rather than scraping one fixed website. 
+* Make it easier to understand which parts of a run consume the most compute/cost while developing multi-stage collectors.
+One feature we especially liked was Self-Healing because it aligns closely with the problem GapRadar’s RecallGuard is trying to solve: websites change, and the hard part is not creating a scraper once—it is knowing whether you can still trust its output weeks later. 
+Bright Data ended up being much more than a hackathon checkbox in GapRadar. It became the layer that gives the product access to live public-web evidence, while GapRadar focuses on deciding whether that evidence is reliable and useful. 
+
+
+
+
+[a]Add video link
