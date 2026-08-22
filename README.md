@@ -87,6 +87,15 @@ flowchart LR
 - Web Intelligence: Bright Data Scraper Studio and SERP API
 - Agent Interface: MCP server + CLI client
 
+## Scrape Resources
+- Fix my Itch - Razorpay [https://razorpay.com/m/fix-my-itch/]
+- Arxiv - open-access archive [https://arxiv.org/]
+
+## Bright Data product Integration
+- Bright Data Scraper Studio
+- Bright Data Collector CLI
+- Bright Data SERP API
+
 ### Deployment
 
 - Backend + PostgreSQL: Railway
