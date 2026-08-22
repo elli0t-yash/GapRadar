@@ -4,6 +4,32 @@ Discover gaps. Prove the data behind them.
 
 GapRadar is a radar for market gaps — not just another web scraper. It continuously turns real-world pain signals into ranked opportunities by detecting unmet demand, connecting those signals with emerging research, and examining the competitive landscape. Every opportunity is backed by traceable evidence and protected by a trust layer that detects extraction drift before bad data can influence decisions. GapRadar can also investigate any user-supplied idea independently, combining academic research, demand evidence, and competitor intelligence. 
 
+## Table of Contents
+
+- [Team](#team)
+- [Live Links](#live-links)
+- [Screenshots](#screenshots)
+- [Screenshots](#screenshots-1)
+- [What Problem It Solves](#what-problem-it-solves)
+- [Core Product Modes](#core-product-modes)
+- [High-Level Architecture](#high-level-architecture)
+- [Tech Stack](#tech-stack)
+- [Scrape Resources](#scrape-resources)
+- [Bright Data product Integration](#bright-data-product-integration)
+- [Deployment](#deployment)
+- [Repository Structure](#repository-structure)
+- [Use Guide](#use-guide)
+- [Quick Start (Local Setup)](#quick-start-local-setup)
+- [Run the App Locally](#run-the-app-locally)
+- [Bright Data Usage](#bright-data-usage)
+- [Structured Output Samples](#structured-output-samples)
+- [Public Data and Compliance Confirmation](#public-data-and-compliance-confirmation)
+- [Reliability Principle](#reliability-principle)
+- [MCP and CLI](#mcp-and-cli)
+- [Demo Video Checklist](#demo-video-checklist)
+- [AI Usage Disclosure](#ai-usage-disclosure)
+- [FAQ](#faq)
+
 ## Team
 
 - Team Name: Proof of Chaos (POC)
