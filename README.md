@@ -8,15 +8,14 @@ GapRadar is a radar for market gaps — not just another web scraper. It continu
 
 - [Team](#team)
 - [Live Links](#live-links)
-- [Screenshots](#screenshots)
-- [Screenshots](#screenshots-1)
 - [What Problem It Solves](#what-problem-it-solves)
-- [Core Product Modes](#core-product-modes)
+- [Screenshots](#screenshots)
 - [High-Level Architecture](#high-level-architecture)
 - [Tech Stack](#tech-stack)
 - [Scrape Resources](#scrape-resources)
 - [Bright Data product Integration](#bright-data-product-integration)
 - [Deployment](#deployment)
+- [Core Product Modes](#core-product-modes)
 - [Repository Structure](#repository-structure)
 - [Use Guide](#use-guide)
 - [Quick Start (Local Setup)](#quick-start-local-setup)
@@ -45,6 +44,17 @@ GapRadar is a radar for market gaps — not just another web scraper. It continu
 - License: https://github.com/mohitkushwaha0601/GapRadar?tab=MIT-1-ov-file
 - Demo Video: https://www.youtube.com/watch?v=thiPPmXqwjE
 
+## What Problem It Solves
+
+Most founders and product teams validate ideas by stitching together search engines, forums, research papers, competitor sites, spreadsheets, and AI tools. That process is slow, fragmented, and often weak on traceable evidence.
+
+GapRadar unifies that into one system that:
+
+- discovers market pain signals from public sources,
+- converts them into ranked opportunities,
+- investigates user-supplied hypotheses across multiple evidence streams,
+- and enforces reliability checks so broken extraction does not silently become bad intelligence.
+
 ## Screenshots
 < Upload IMages>
 
@@ -66,38 +76,6 @@ Suggested screenshot captions:
 - Opportunity detail with evidence and score context
 - RecallGuard reliability view (incident/trust state)
 - Investigation workflow (research + demand + competitors)
-
-## What Problem It Solves
-
-Most founders and product teams validate ideas by stitching together search engines, forums, research papers, competitor sites, spreadsheets, and AI tools. That process is slow, fragmented, and often weak on traceable evidence.
-
-GapRadar unifies that into one system that:
-
-- discovers market pain signals from public sources,
-- converts them into ranked opportunities,
-- investigates user-supplied hypotheses across multiple evidence streams,
-- and enforces reliability checks so broken extraction does not silently become bad intelligence.
-
-## Core Product Modes
-
-1. Discovery Mode
-- Ingests trusted public-web problem signals.
-- Ranks opportunities using structured signals.
-
-2. Investigation Mode
-- Lets users submit a hypothesis.
-- Collects and presents research evidence, demand evidence, and competitor candidates.
-
-Detailed product docs:
-
-- [docs/product/overview.md](docs/product/overview.md)
-- [docs/product/demo-runbook.md](docs/product/demo-runbook.md)
-
-Related API surfaces:
-
-- [backend/app/api/v1/routes/opportunities.py](backend/app/api/v1/routes/opportunities.py)
-- [backend/app/api/v1/routes/investigations.py](backend/app/api/v1/routes/investigations.py)
-- [backend/app/api/v1/routes/reliability.py](backend/app/api/v1/routes/reliability.py)
 
 ## High-Level Architecture
 
@@ -128,7 +106,7 @@ flowchart LR
 - Bright Data Collector CLI
 - Bright Data SERP API
 
-### Deployment
+## Deployment
 
 - Backend + PostgreSQL: Railway
 - Frontend: Vercel
@@ -136,6 +114,27 @@ flowchart LR
 Deployment reference:
 
 - [docs/architecture/deployment_architecture.md](docs/architecture/deployment_architecture.md)
+
+## Core Product Modes
+
+1. Discovery Mode
+- Ingests trusted public-web problem signals.
+- Ranks opportunities using structured signals.
+
+2. Investigation Mode
+- Lets users submit a hypothesis.
+- Collects and presents research evidence, demand evidence, and competitor candidates.
+
+Detailed product docs:
+
+- [docs/product/overview.md](docs/product/overview.md)
+- [docs/product/demo-runbook.md](docs/product/demo-runbook.md)
+
+Related API surfaces:
+
+- [backend/app/api/v1/routes/opportunities.py](backend/app/api/v1/routes/opportunities.py)
+- [backend/app/api/v1/routes/investigations.py](backend/app/api/v1/routes/investigations.py)
+- [backend/app/api/v1/routes/reliability.py](backend/app/api/v1/routes/reliability.py)
 
 ## Repository Structure
 
