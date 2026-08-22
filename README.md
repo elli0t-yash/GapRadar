@@ -47,6 +47,12 @@ GapRadar is a radar for market gaps — not just another web scraper. It continu
 
 ## Screenshots
 < Upload IMages>
+
+<img width="2048" height="1021" alt="image" src="https://github.com/user-attachments/assets/0fb74832-4e86-4016-aefc-3561a7fd577e" />
+Code section of our gapradar-fix-my-itch scraper in Bright Data Scraper Studio
+
+
+
 ## Screenshots
 
 Add your final screenshots here before submission:
