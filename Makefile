@@ -1,4 +1,7 @@
-.PHONY: backend frontend test lint
+.PHONY: setup backend frontend test lint
+
+setup:
+	bash scripts/setup_local.sh
 
 backend:
 	cd backend && uv run uvicorn app.main:app --reload
