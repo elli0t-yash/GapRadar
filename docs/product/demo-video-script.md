@@ -15,11 +15,11 @@ at the end list phrasing to avoid.
 > "This is GapRadar — an opportunity-intelligence platform. It turns
 > public web signals into ranked, evidence-backed market opportunities,
 > and every signal has to survive a reliability gate before it can
-> influence a ranking. Let's go straight through the pipeline."
+> influence a ranking."
 
 ---
 
-## 1. Discovery pipeline (0:15–0:45)
+## 1. Discovery pipeline (0:15–0:45) - Opportunities
 
 **[SCREEN]** Scroll the opportunity feed; open one card; point at the
 score.
