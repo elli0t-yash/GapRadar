@@ -43,7 +43,7 @@ GapRadar is a radar for market gaps — not just another web scraper. It continu
 - Pull Requests: https://github.com/mohitkushwaha0601/GapRadar/pulls?q=
 - Releases: https://github.com/mohitkushwaha0601/GapRadar/releases
 - License: https://github.com/mohitkushwaha0601/GapRadar?tab=MIT-1-ov-file
-- Demo Video: ADD_YOUR_YOUTUBE_LINK_HERE
+- Demo Video: https://www.youtube.com/watch?v=thiPPmXqwjE
 
 ## Screenshots
 < Upload IMages>
