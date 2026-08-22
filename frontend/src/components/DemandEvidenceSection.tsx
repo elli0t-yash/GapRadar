@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type {
   DemandClassification,
   DemandEvidence,
@@ -94,7 +93,6 @@ export function DemandEvidenceSection({
   collection: DemandEvidenceCollection;
   partial: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const visibleCount = GROUPS.reduce(
     (total, group) =>
       total +

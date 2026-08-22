@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type {
   CompetitorClassification,
   CompetitorCollection,
@@ -76,7 +75,6 @@ export function CompetitorSection({
   collection: CompetitorCollection;
   partial: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const visibleCount = GROUPS.reduce(
     (total, group) =>
       total +
