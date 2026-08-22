@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   DemandClassification,
   DemandEvidence,
@@ -93,6 +94,7 @@ export function DemandEvidenceSection({
   collection: DemandEvidenceCollection;
   partial: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const visibleCount = GROUPS.reduce(
     (total, group) =>
       total +
@@ -116,24 +118,24 @@ export function DemandEvidenceSection({
         </p>
       ) : null}
 
-      {visibleCount === 0 ? (
-        <div className="investigation-result-empty">
-          <h3>
-            No supporting or contradicting demand evidence was accepted from
-            this discovery pass.
-          </h3>
-          <p>
-            The completed pass did not produce evidence for or against the
-            hypothesis on this surface.
-          </p>
-        </div>
-      ) : null}
+          {visibleCount === 0 ? (
+            <div className="investigation-result-empty">
+              <h3>
+                No supporting or contradicting demand evidence was accepted from
+                this discovery pass.
+              </h3>
+              <p>
+                The completed pass did not produce evidence for or against the
+                hypothesis on this surface.
+              </p>
+            </div>
+          ) : null}
 
-      {GROUPS.map((group) => {
-        const evidence = collection.evidence.filter(
-          (item) => item.classification === group.classification,
-        );
-        if (evidence.length === 0) return null;
+          {GROUPS.map((group) => {
+            const evidence = collection.evidence.filter(
+              (item) => item.classification === group.classification,
+            );
+            if (evidence.length === 0) return null;
 
         return (
           <section

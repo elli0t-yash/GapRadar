@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   CompetitorClassification,
   CompetitorCollection,
@@ -75,6 +76,7 @@ export function CompetitorSection({
   collection: CompetitorCollection;
   partial: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const visibleCount = GROUPS.reduce(
     (total, group) =>
       total +
@@ -98,21 +100,21 @@ export function CompetitorSection({
         </p>
       ) : null}
 
-      {visibleCount === 0 ? (
-        <div className="investigation-result-empty">
-          <h3>No competitor candidates were accepted from this discovery pass.</h3>
-          <p>
-            This is a valid zero result, not a complete competitive-landscape
-            claim.
-          </p>
-        </div>
-      ) : null}
+          {visibleCount === 0 ? (
+            <div className="investigation-result-empty">
+              <h3>No competitor candidates were accepted from this discovery pass.</h3>
+              <p>
+                This is a valid zero result, not a complete competitive-landscape
+                claim.
+              </p>
+            </div>
+          ) : null}
 
-      {GROUPS.map((group) => {
-        const competitors = collection.competitors.filter(
-          (competitor) => competitor.classification === group.classification,
-        );
-        if (competitors.length === 0) return null;
+          {GROUPS.map((group) => {
+            const competitors = collection.competitors.filter(
+              (competitor) => competitor.classification === group.classification,
+            );
+            if (competitors.length === 0) return null;
 
         return (
           <section

@@ -316,6 +316,24 @@ export function ProblemDetail({
     detail.scores.itch !== null ||
     SCORE_LABELS.some(({ key }) => detail.scores[key] !== null);
 
+  const researchMeta = researchLoading
+    ? "Loading…"
+    : researchError
+      ? "Couldn't load"
+      : research && research.matched_paper_count > 0
+        ? [
+            `${research.paper_count} papers`,
+            `${research.matched_paper_count} relevant`,
+            research.average_relevance_score !== null
+              ? `avg ${Math.round(research.average_relevance_score)}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : research
+          ? "No matches yet"
+          : "Not analysed";
+
   return (
     <div className="problem-detail-overlay" onClick={onClose}>
       <div
