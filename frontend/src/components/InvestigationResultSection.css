@@ -1,0 +1,32 @@
+.investigation-result-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px var(--space-2);
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.investigation-result-toggle:hover {
+  color: var(--accent-text);
+  border-color: var(--accent-border);
+}
+
+.investigation-result-chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.investigation-result-toggle[aria-expanded="true"] .investigation-result-chevron {
+  transform: rotate(-135deg);
+}

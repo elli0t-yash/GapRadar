@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
+import { HomePage } from "./pages/HomePage";
 import { GapRadarPage } from "./pages/GapRadarPage";
 import { ComingSoonPage } from "./pages/ComingSoonPage";
 import { ReliabilityPage } from "./pages/ReliabilityPage";
@@ -32,10 +33,10 @@ function App() {
     <>
       {showIntro ? <ScrapingIntro onDone={finishIntro} /> : null}
       <Routes>
-        <Route
-          path="/"
-          element={<GapRadarPage />}
-        />
+        <Route path="/" element={<HomePage />} />
+        {/* The intelligence workspace. This is the product surface the
+            landing narrative points at; it is unchanged, only re-homed. */}
+        <Route path="/opportunities" element={<GapRadarPage />} />
         <Route
           path="/trends"
           element={

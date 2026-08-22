@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, isAbort, NetworkError } from "../api/client";
 import { createInvestigation, listInvestigations } from "../api/investigations";
 import type { Investigation } from "../api/investigationTypes";
@@ -33,7 +33,11 @@ function formatCreatedAt(value: string): string {
 
 export function InvestigatePage() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
+  // The landing page hands a typed hypothesis over as ?q=. It only ever
+  // PREFILLS this field: creation still requires the submit below, and
+  // analysis still requires an explicit action on the detail page.
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q")?.trim() ?? "");
   const [industry, setIndustry] = useState("");
   const [queryError, setQueryError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);

@@ -123,6 +123,14 @@
   --fs-xl: 28px;
   --fs-2xl: 36px;
 
+  /* Editorial display scale, used by the landing narrative only.
+     The vw term does the work: the floor is small enough that the longest
+     headline word still fits a 320px viewport, and the ceiling is chosen so
+     the longest line still fits the 1160px container. */
+  --fs-display: clamp(2.75rem, 7.4vw, 6.75rem);
+  --fs-section: clamp(2.1rem, 5.4vw, 5.25rem);
+  --fs-statement: clamp(1.7rem, 3.6vw, 3.1rem);
+
   color-scheme: light;
   accent-color: #ff6a00;
 }
@@ -208,6 +216,88 @@
 
   color-scheme: dark;
   accent-color: #ff7a1a;
+}
+
+/* An ALWAYS-DARK band, for the landing page's inverted sections.
+ *
+ * It re-declares the same semantic names every component already consumes,
+ * so a dark section renders identically whichever global theme is active --
+ * no filter tricks, no second component stylesheet. Under the light theme
+ * this is the darkest thing on the page; under the dark theme it is lifted
+ * one step off the page ground (see the override below) so the band still
+ * reads as a deliberate band rather than dissolving into the page.
+ */
+[data-surface="dark"] {
+  --text: #d6cabf;
+  --text-h: #f6f0e9;
+  --text-muted: #a3948a;
+  --bg: #17120e;
+  --bg-raised: #201a15;
+  --bg-subtle: #2a231c;
+  --bg-inset: #251f19;
+  --border: #372f27;
+  --border-strong: #4d423a;
+
+  --accent: #ff7a1a;
+  --accent-2: #ffa15c;
+  --accent-bg: rgba(255, 138, 46, 0.14);
+  --accent-border: rgba(255, 138, 46, 0.34);
+  --accent-text: #ffa768;
+  --on-accent: #241207;
+  --accent-glow: 0 8px 20px -6px rgba(255, 122, 26, 0.45);
+  --flame: #ff7048;
+
+  --ok-text: #6fd6a3;
+  --ok-strong: #58c48f;
+  --ok-bg: rgba(88, 196, 143, 0.12);
+  --ok-border: rgba(88, 196, 143, 0.3);
+
+  --warn-text: #f0b45a;
+  --warn-strong: #e8a53f;
+  --warn-bg: rgba(232, 165, 63, 0.12);
+  --warn-border: rgba(232, 165, 63, 0.32);
+
+  --danger-text: #ff9b8f;
+  --danger-strong: #f08175;
+  --danger-bg: rgba(240, 129, 117, 0.12);
+  --danger-border: rgba(240, 129, 117, 0.32);
+  --danger-bg-subtle: rgba(240, 129, 117, 0.06);
+
+  --field-bg: #151211;
+  --field-border: #4d423a;
+  --field-text: #f6f0e9;
+  --field-placeholder: #8d8078;
+
+  --dot-grid: rgba(255, 145, 66, 0.08);
+  --dot-grid-neutral: rgba(255, 236, 220, 0.05);
+  --page-glow: rgba(255, 145, 66, 0.12);
+  --surface-translucent: rgba(38, 31, 26, 0.84);
+  --surface-translucent-strong: rgba(33, 27, 23, 0.9);
+  --surface-feature: #241d17;
+
+  --invert-bg: #f6f0e9;
+  --invert-text: #241207;
+  --invert-accent: #b34c00;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 16px 32px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
+  --shadow-card: 0 14px 36px -22px rgba(0, 0, 0, 0.75);
+  --shadow-feature: 0 24px 60px -38px rgba(0, 0, 0, 0.9);
+  --focus-ring: 0 0 0 3px rgba(255, 145, 66, 0.45);
+
+  color-scheme: dark;
+  accent-color: #ff7a1a;
+  color: var(--text);
+  background-color: var(--bg);
+}
+
+/* Dark theme already owns a near-black page; lift the band off it. */
+:root[data-theme="dark"] [data-surface="dark"] {
+  --bg: #1e1813;
+  --bg-raised: #272019;
+  --bg-subtle: #302820;
+  --bg-inset: #2b241d;
 }
 
 * {

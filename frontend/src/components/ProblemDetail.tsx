@@ -18,6 +18,7 @@ import type {
 import { isEnrichmentTerminal } from "../api/types";
 import type { Problem } from "../types";
 import { ResearchSection } from "./ResearchSection";
+import { CollapsibleSection } from "./CollapsibleSection";
 import { formatRelativeDate } from "../utils/formatDate";
 import "./ProblemDetail.css";
 
@@ -315,24 +316,6 @@ export function ProblemDetail({
     detail.scores.itch !== null ||
     SCORE_LABELS.some(({ key }) => detail.scores[key] !== null);
 
-  const researchMeta = researchLoading
-    ? "Loading…"
-    : researchError
-      ? "Couldn't load"
-      : research && research.matched_paper_count > 0
-        ? [
-            `${research.paper_count} papers`,
-            `${research.matched_paper_count} relevant`,
-            research.average_relevance_score !== null
-              ? `avg ${Math.round(research.average_relevance_score)}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")
-        : research
-          ? "No matches yet"
-          : "Not analysed";
-
   return (
     <div className="problem-detail-overlay" onClick={onClose}>
       <div
@@ -410,6 +393,25 @@ export function ProblemDetail({
           </p>
         </section>
 
+        <CollapsibleSection label="Source trail" title="Evidence">
+          <div className="problem-detail-evidence-row">
+            <div>
+              <strong>{detail.source ?? "Persisted source"}</strong>
+              <span>Observed {formatRelativeDate(detail.date)}</span>
+            </div>
+            {detail.sourceUrl && (
+              <a
+                className="problem-detail-link"
+                href={detail.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View original source <span aria-hidden="true">↗</span>
+              </a>
+            )}
+          </div>
+        </CollapsibleSection>
+
         {hasScoreBreakdown ? (
           <details className="problem-detail-breakdown">
             <summary>Inspect score breakdown</summary>
@@ -438,113 +440,38 @@ export function ProblemDetail({
           </details>
         ) : null}
 
-        <div className="problem-detail-rows">
-          <details className="problem-detail-row">
-            <summary>
-              <span className="problem-detail-row-icon" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none">
-                  <rect x="3" y="3" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-                  <rect x="11" y="3" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-                  <rect x="3" y="11" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-                  <rect x="11" y="11" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-                </svg>
-              </span>
-              <span className="problem-detail-row-title" id="problem-evidence-title">
-                Evidence &amp; source trail
-              </span>
-              <span className="problem-detail-row-meta">
-                {detail.source ?? "Persisted source"} · Observed{" "}
-                {formatRelativeDate(detail.date)}
-              </span>
-              <svg className="problem-detail-row-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </summary>
-            <div className="problem-detail-row-body">
-              <div className="problem-detail-evidence-row">
-                <div>
-                  <strong>{detail.source ?? "Persisted source"}</strong>
-                  <span>Observed {formatRelativeDate(detail.date)}</span>
-                </div>
-                {detail.sourceUrl && (
-                  <a
-                    className="problem-detail-link"
-                    href={detail.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View original source <span aria-hidden="true">↗</span>
-                  </a>
-                )}
-              </div>
+        <CollapsibleSection label="Source health" title="Reliability">
+          <div className="problem-detail-reliability-row">
+            <span aria-hidden="true">✓</span>
+            <div>
+              <strong>Trusted data</strong>
+              <p>
+                This opportunity is visible because its source collector passes
+                GapRadar reliability gating.
+              </p>
             </div>
-          </details>
+            <Link to="/reliability">Inspect RecallGuard <span aria-hidden="true">→</span></Link>
+          </div>
+        </CollapsibleSection>
 
-          <details className="problem-detail-row">
-            <summary>
-              <span className="problem-detail-row-icon" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none">
-                  <path d="M5 10.5l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-              <span className="problem-detail-row-title" id="problem-reliability-title">
-                Source reliability
-              </span>
-              <span className="problem-detail-row-meta is-ok">Trusted data</span>
-              <svg className="problem-detail-row-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </summary>
-            <div className="problem-detail-row-body">
-              <div className="problem-detail-reliability-row">
-                <span aria-hidden="true">✓</span>
-                <div>
-                  <strong>Trusted data</strong>
-                  <p>
-                    This opportunity is visible because its source collector passes
-                    GapRadar reliability gating.
-                  </p>
-                </div>
-                <Link to="/reliability">Inspect RecallGuard <span aria-hidden="true">→</span></Link>
-              </div>
-            </div>
-          </details>
-
-          <details className="problem-detail-row">
-            <summary>
-              <span className="problem-detail-row-icon" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none">
-                  <circle cx="10" cy="10" r="6.5" stroke="currentColor" strokeWidth="1.6" />
-                  <circle cx="10" cy="10" r="2" fill="currentColor" />
-                </svg>
-              </span>
-              <span className="problem-detail-row-title" id="research-heading">
-                Research intelligence
-              </span>
-              <span className="problem-detail-row-meta">{researchMeta}</span>
-              <svg className="problem-detail-row-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </summary>
-            <div className="problem-detail-row-body">
-              <ResearchSection
-                research={research}
-                loading={researchLoading}
-                error={researchError}
-                onRetry={retryResearch}
-                enrichmentStatus={enrichmentStatus}
-                enrichmentError={enrichmentError}
-                enrichmentQueryStates={enrichmentQueryStates}
-                enrichmentCounters={enrichmentCounters}
-                enrichmentOutcomeReason={enrichmentOutcomeReason}
-                enrichmentIsRetryable={enrichmentIsRetryable}
-                enrichmentStarting={enrichmentStarting}
-                enrichmentWarning={enrichmentWarning}
-                onAnalyse={analyse}
-              />
-            </div>
-          </details>
-        </div>
+        <CollapsibleSection title="Research intelligence">
+          <ResearchSection
+            research={research}
+            loading={researchLoading}
+            error={researchError}
+            onRetry={retryResearch}
+            enrichmentStatus={enrichmentStatus}
+            enrichmentError={enrichmentError}
+            enrichmentQueryStates={enrichmentQueryStates}
+            enrichmentCounters={enrichmentCounters}
+            enrichmentOutcomeReason={enrichmentOutcomeReason}
+            enrichmentIsRetryable={enrichmentIsRetryable}
+            enrichmentStarting={enrichmentStarting}
+            enrichmentWarning={enrichmentWarning}
+            onAnalyse={analyse}
+            showHeading={false}
+          />
+        </CollapsibleSection>
       </div>
     </div>
   );

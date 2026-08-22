@@ -15,31 +15,9 @@
   margin-bottom: var(--space-4);
 }
 
-.investigation-result-toggle {
-  width: 100%;
-  border: none;
-  background: none;
-  padding: 0;
-  margin-bottom: 0;
-  text-align: left;
-  cursor: pointer;
-  align-items: center;
-}
-
-.investigation-result-toggle[aria-expanded="true"] {
-  margin-bottom: var(--space-4);
-}
-
-.investigation-result-chevron {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  color: var(--text-muted);
-  transition: transform 0.15s ease;
-}
-
-.investigation-result-chevron.is-open {
-  transform: rotate(180deg);
+.investigation-result-heading > div {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .investigation-result-heading h2 {

@@ -13,7 +13,8 @@ import type { Problem } from "../types";
 import "./GapRadarPage.css";
 
 const FEATURED_COUNT = 6;
-const TOP_PICKS_FILTER = "Top Picks";
+const TOP_PICKS = "Top Picks";
+const ALL = "All";
 
 function describeError(error: unknown): string {
   if (error instanceof NetworkError) {
@@ -32,7 +33,10 @@ export function GapRadarPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState(TOP_PICKS_FILTER);
+  // "Top Picks" is the default landing filter, curated to the strongest
+  // few results. "All" is a distinct, deliberate choice to see every
+  // trusted opportunity.
+  const [category, setCategory] = useState(TOP_PICKS);
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
 
   // The one place the Discover feed is loaded. `limit=200` is the backend's
@@ -66,9 +70,7 @@ export function GapRadarPage() {
     const q = query.trim().toLowerCase();
     return problems.filter((p) => {
       const matchesCategory =
-        category === "All" ||
-        category === TOP_PICKS_FILTER ||
-        p.category === category;
+        category === ALL || category === TOP_PICKS || p.category === category;
       const matchesQuery =
         q.length === 0 ||
         p.title.toLowerCase().includes(q) ||
@@ -88,7 +90,7 @@ export function GapRadarPage() {
 
   const resetFilters = useCallback(() => {
     setQuery("");
-    setCategory(TOP_PICKS_FILTER);
+    setCategory(TOP_PICKS);
   }, []);
 
   const retry = useCallback(() => {
@@ -97,16 +99,18 @@ export function GapRadarPage() {
   }, []);
 
   const isLoading = problems === null && loadError === null;
-  const isFiltering = query.trim().length > 0 || category !== TOP_PICKS_FILTER;
-  const isTopPicks = category === TOP_PICKS_FILTER && query.trim().length === 0;
+  const isFiltering =
+    query.trim().length > 0 || (category !== ALL && category !== TOP_PICKS);
 
-  // Server order. "Top Picks" with no search text is the curated landing
-  // state -- capped to a preview -- while "All" or a specific category (or
-  // typing a search) shows every match for that filter.
+  // Server order. "Top Picks" caps the grid to a curated preview of the
+  // strongest results; every other choice -- "All" or a specific industry
+  // -- shows every match, so "Choose from N problems" is never a lie.
   const featuredProblems = useMemo(
     () =>
-      isTopPicks ? filteredProblems.slice(0, FEATURED_COUNT) : filteredProblems,
-    [filteredProblems, isTopPicks],
+      category === TOP_PICKS
+        ? filteredProblems.slice(0, FEATURED_COUNT)
+        : filteredProblems,
+    [filteredProblems, category],
   );
 
   return (

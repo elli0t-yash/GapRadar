@@ -1,8 +1,8 @@
-import { useState } from "react";
 import type {
   InvestigationPaperMatch,
   InvestigationResearchIntelligence,
 } from "../api/investigationTypes";
+import { InvestigationResultSection } from "./InvestigationResultSection";
 import "./InvestigationResearchSection.css";
 
 function formatPublished(date: string): string {
@@ -84,92 +84,64 @@ export function InvestigationResearchSection({
   research: InvestigationResearchIntelligence;
   partial: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
-    <section className="investigation-result-section" aria-labelledby="investigation-research-title">
-      <button
-        type="button"
-        className="investigation-result-heading investigation-result-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <div>
-          <p className="investigation-result-eyebrow">Research frontier</p>
-          <h2 id="investigation-research-title">Relevant academic research</h2>
-        </div>
-        <svg
-          className={`investigation-result-chevron${open ? " is-open" : ""}`}
-          viewBox="0 0 20 20"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M5 7l5 6 5-6"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-
-      {open ? (
-        <>
-          {partial ? (
-            <p className="investigation-result-warning">
-              Research discovery was partial. These are the persisted matches from
-              the searches that completed.
-            </p>
-          ) : null}
-
-          <dl className="investigation-research-metrics">
-            <div>
-              <dt>Papers discovered</dt>
-              <dd>{research.paper_count}</dd>
-            </div>
-            <div>
-              <dt>Relevant papers</dt>
-              <dd>{research.matched_paper_count}</dd>
-            </div>
-            {research.average_relevance_score !== null ? (
-              <div>
-                <dt>Average relevance</dt>
-                <dd>{Math.round(research.average_relevance_score)}</dd>
-              </div>
-            ) : null}
-          </dl>
-
-          {research.top_concepts.length > 0 ? (
-            <ul className="investigation-concept-list is-summary" aria-label="Top concepts">
-              {research.top_concepts.map((concept) => (
-                <li key={concept}>{concept}</li>
-              ))}
-            </ul>
-          ) : null}
-
-          {research.matched_paper_count === 0 ? (
-            <div className="investigation-result-empty">
-              <h3>No research crossed the relevance threshold.</h3>
-              <p>The scan completed without an accepted academic match.</p>
-            </div>
-          ) : null}
-
-          {research.top_papers.length > 0 ? (
-            <ul className="investigation-paper-list">
-              {research.top_papers.map((paper) => (
-                <PaperCard key={paper.research_paper_id} paper={paper} />
-              ))}
-            </ul>
-          ) : null}
-
-          {research.matched_paper_count > research.top_papers.length ? (
-            <p className="investigation-result-footnote">
-              Showing {research.top_papers.length} of {research.matched_paper_count} relevant papers.
-            </p>
-          ) : null}
-        </>
+    <InvestigationResultSection
+      id="investigation-research-title"
+      eyebrow="Research frontier"
+      title="Relevant academic research"
+    >
+      {partial ? (
+        <p className="investigation-result-warning">
+          Research discovery was partial. These are the persisted matches from
+          the searches that completed.
+        </p>
       ) : null}
-    </section>
+
+      <dl className="investigation-research-metrics">
+        <div>
+          <dt>Papers discovered</dt>
+          <dd>{research.paper_count}</dd>
+        </div>
+        <div>
+          <dt>Relevant papers</dt>
+          <dd>{research.matched_paper_count}</dd>
+        </div>
+        {research.average_relevance_score !== null ? (
+          <div>
+            <dt>Average relevance</dt>
+            <dd>{Math.round(research.average_relevance_score)}</dd>
+          </div>
+        ) : null}
+      </dl>
+
+      {research.top_concepts.length > 0 ? (
+        <ul className="investigation-concept-list is-summary" aria-label="Top concepts">
+          {research.top_concepts.map((concept) => (
+            <li key={concept}>{concept}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {research.matched_paper_count === 0 ? (
+        <div className="investigation-result-empty">
+          <h3>No research crossed the relevance threshold.</h3>
+          <p>The scan completed without an accepted academic match.</p>
+        </div>
+      ) : null}
+
+      {research.top_papers.length > 0 ? (
+        <ul className="investigation-paper-list">
+          {research.top_papers.map((paper) => (
+            <PaperCard key={paper.research_paper_id} paper={paper} />
+          ))}
+        </ul>
+      ) : null}
+
+      {research.matched_paper_count > research.top_papers.length ? (
+        <p className="investigation-result-footnote">
+          Showing {research.top_papers.length} of {research.matched_paper_count} relevant papers.
+        </p>
+      ) : null}
+    </InvestigationResultSection>
   );
 }

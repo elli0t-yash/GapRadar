@@ -1,9 +1,9 @@
-import { useState } from "react";
 import type {
   CompetitorClassification,
   CompetitorCollection,
   CompetitorEvidence,
 } from "../api/investigationTypes";
+import { InvestigationResultSection } from "./InvestigationResultSection";
 import "./InvestigationEvidenceSections.css";
 
 const GROUPS: ReadonlyArray<{
@@ -75,7 +75,6 @@ export function CompetitorSection({
   collection: CompetitorCollection;
   partial: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const visibleCount = GROUPS.reduce(
     (total, group) =>
       total +
@@ -86,41 +85,18 @@ export function CompetitorSection({
   );
 
   return (
-    <section className="investigation-result-section evidence-section" aria-labelledby="competitor-candidates-title">
-      <button
-        type="button"
-        className="investigation-result-heading investigation-result-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <div>
-          <p className="investigation-result-eyebrow">Product discovery</p>
-          <h2 id="competitor-candidates-title">Competitor candidates</h2>
-        </div>
-        <svg
-          className={`investigation-result-chevron${open ? " is-open" : ""}`}
-          viewBox="0 0 20 20"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M5 7l5 6 5-6"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-
-      {open ? (
-        <>
-          {partial ? (
-            <p className="investigation-result-warning">
-              Competitor discovery was partial. These candidates are the persisted
-              results from the searches that succeeded.
-            </p>
-          ) : null}
+    <InvestigationResultSection
+      id="competitor-candidates-title"
+      eyebrow="Product discovery"
+      title="Competitor candidates"
+      extraClassName="evidence-section"
+    >
+      {partial ? (
+        <p className="investigation-result-warning">
+          Competitor discovery was partial. These candidates are the persisted
+          results from the searches that succeeded.
+        </p>
+      ) : null}
 
           {visibleCount === 0 ? (
             <div className="investigation-result-empty">
@@ -138,29 +114,27 @@ export function CompetitorSection({
             );
             if (competitors.length === 0) return null;
 
-            return (
-              <section
-                key={group.classification}
-                className={`evidence-group is-${group.classification}`}
-                aria-labelledby={`competitor-${group.classification}-title`}
-              >
-                <header>
-                  <div>
-                    <h3 id={`competitor-${group.classification}-title`}>{group.label}</h3>
-                    <p>{group.description}</p>
-                  </div>
-                  <span>{competitors.length}</span>
-                </header>
-                <ul className="evidence-card-list">
-                  {competitors.map((competitor) => (
-                    <CompetitorCard key={competitor.id} competitor={competitor} />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </>
-      ) : null}
-    </section>
+        return (
+          <section
+            key={group.classification}
+            className={`evidence-group is-${group.classification}`}
+            aria-labelledby={`competitor-${group.classification}-title`}
+          >
+            <header>
+              <div>
+                <h3 id={`competitor-${group.classification}-title`}>{group.label}</h3>
+                <p>{group.description}</p>
+              </div>
+              <span>{competitors.length}</span>
+            </header>
+            <ul className="evidence-card-list">
+              {competitors.map((competitor) => (
+                <CompetitorCard key={competitor.id} competitor={competitor} />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </InvestigationResultSection>
   );
 }

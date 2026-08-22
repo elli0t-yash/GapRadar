@@ -161,6 +161,47 @@
   font-size: var(--fs-lg);
 }
 
+.problem-detail-section.is-collapsible h3 {
+  margin: 0;
+}
+
+.problem-detail-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  font-size: var(--fs-lg);
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.problem-detail-section-toggle:hover { color: var(--accent-text); }
+
+.problem-detail-section-chevron {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.problem-detail-section-toggle[aria-expanded="true"] .problem-detail-section-chevron {
+  transform: rotate(-135deg);
+}
+
+.problem-detail-section-content {
+  padding-top: var(--space-2);
+}
+
 .problem-detail-description {
   max-width: 76ch;
   font-size: var(--fs-md);

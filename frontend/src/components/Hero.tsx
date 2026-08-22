@@ -154,7 +154,7 @@ export function Hero({
               }
               onClick={() => onCategoryChange("Top Picks")}
             >
-              Top Picks
+              Top picks
             </button>
             <button
               type="button"
