@@ -284,6 +284,10 @@ Full disclosure note:
 
 - [AI_USAGE.md](AI_USAGE.md)
 
+## Disclaimer
+
+Razorpay opportunity links may land on the Razorpay homepage rather than a unique per-problem detail page because Razorpay does not natively expose stable identifiers for individual problems or entries. In these cases, the platform surfaces the closest public landing page available while preserving the opportunity context and evidence trail within GapRadar.
+
 ## FAQ
 
 1. Is GapRadar just a scraper?
