@@ -282,46 +282,61 @@ Full disclosure note:
 ## FAQ
 
 1. Is GapRadar just a scraper?
-No. It is an opportunity intelligence and investigation platform with reliability gating.
+
+Answer: No. It is an opportunity intelligence and investigation platform with reliability gating.
 
 2. What makes it trust-aware?
-RecallGuard evaluates extraction reliability and blocks untrusted signals from decision surfaces.
+
+Answer: RecallGuard evaluates extraction reliability and blocks untrusted signals from decision surfaces.
 
 3. Can users investigate their own ideas?
-Yes. Investigation Mode is designed for user-supplied hypotheses.
+
+Answer: Yes. Investigation Mode is designed for user-supplied hypotheses.
 
 4. Does GapRadar use private or login-protected data?
-The platform is designed for public-web sources and does not intentionally bypass access controls.
+
+Answer: The platform is designed for public-web sources and does not intentionally bypass access controls.
 
 5. Where are deployment notes?
-See [docs/architecture/deployment_architecture.md](docs/architecture/deployment_architecture.md).
+
+Answer: See [docs/architecture/deployment_architecture.md](docs/architecture/deployment_architecture.md).
 
 6. How does GapRadar keep AI useful without letting it control final decisions?
-GapRadar uses deterministic gates for trust-critical decisions. LLM-backed components can assist with query generation, matching, and classification, but reliability state, incident lifecycle, and recovery criteria are enforced by explicit backend rules.
+
+Answer: GapRadar uses deterministic gates for trust-critical decisions. LLM-backed components can assist with query generation, matching, and classification, but reliability state, incident lifecycle, and recovery criteria are enforced by explicit backend rules.
 
 7. What is the exact meaning of APPROVED != RECOVERED?
-An approved repair means a candidate fix was accepted for deployment. Recovered means a fresh independent post-repair run passed all validation checks. Only then does RecallGuard close the incident.
+
+Answer: An approved repair means a candidate fix was accepted for deployment. Recovered means a fresh independent post-repair run passed all validation checks. Only then does RecallGuard close the incident.
 
 8. What happens if the research run is only partially successful?
-Partial success is preserved as partial evidence, not discarded. If at least one query returns usable results, GapRadar persists what it learned and marks status and warnings so users can judge confidence and decide whether to rerun.
+
+Answer: Partial success is preserved as partial evidence, not discarded. If at least one query returns usable results, GapRadar persists what it learned and marks status and warnings so users can judge confidence and decide whether to rerun.
 
 9. How does Investigation Mode control spend and avoid noisy search plans?
-GapRadar validates plans before provider calls. It enforces family-level query bounds, duplicate checks, intent constraints, and total plan ceilings so one click cannot silently fan out into unbounded paid requests.
+
+Answer: GapRadar validates plans before provider calls. It enforces family-level query bounds, duplicate checks, intent constraints, and total plan ceilings so one click cannot silently fan out into unbounded paid requests.
 
 10. What prevents duplicate investigation runs from double-clicks or retries?
-Run-claim logic and active-run constraints ensure one in-flight run per investigation. A second trigger during an active run returns an already-running response instead of scheduling duplicate work.
+
+Answer: Run-claim logic and active-run constraints ensure one in-flight run per investigation. A second trigger during an active run returns an already-running response instead of scheduling duplicate work.
 
 11. What happens if the backend restarts during a long investigation run?
-The in-process background task can be interrupted, but run state is persisted. Stale-run reconciliation marks stranded active runs terminal so users can re-run safely without corrupting previously persisted evidence.
+
+Answer: The in-process background task can be interrupted, but run state is persisted. Stale-run reconciliation marks stranded active runs terminal so users can re-run safely without corrupting previously persisted evidence.
 
 12. How are opportunities protected from untrusted data?
-Opportunity reads are trust-gated by RecallGuard state. Signals from collectors with active incidents are excluded from decision surfaces until reliability is re-established.
+
+Answer: Opportunity reads are trust-gated by RecallGuard state. Signals from collectors with active incidents are excluded from decision surfaces until reliability is re-established.
 
 13. How do Discovery and Investigation differ in trust semantics?
-Discovery starts from externally observed signals and ranks market gaps. Investigation starts from a user hypothesis and gathers supporting or contradicting evidence. Both share evidence pipelines, but their origin and interpretation are intentionally distinct.
+
+Answer: Discovery starts from externally observed signals and ranks market gaps. Investigation starts from a user hypothesis and gathers supporting or contradicting evidence. Both share evidence pipelines, but their origin and interpretation are intentionally distinct.
 
 14. Why separate demand evidence, competitor evidence, and research evidence?
-These represent different questions: Is the pain real, who is already solving it, and what does published research suggest. Keeping them separate prevents one weak stream from masking another and improves explainability.
+
+Answer: These represent different questions: Is the pain real, who is already solving it, and what does published research suggest. Keeping them separate prevents one weak stream from masking another and improves explainability.
 
 15. Does GapRadar fabricate missing evidence when sources fail?
-No. Missing or failed phases are explicitly represented as failed or skipped states. GapRadar avoids synthetic backfilling so reviewers can see what was truly observed versus what could not be collected.
+
+Answer: No. Missing or failed phases are explicitly represented as failed or skipped states. GapRadar avoids synthetic backfilling so reviewers can see what was truly observed versus what could not be collected.
