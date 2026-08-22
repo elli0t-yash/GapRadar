@@ -4,17 +4,17 @@ import "./InvestigationResultSection.css";
 
 /**
  * The shared shell for the three terminal result surfaces (research,
- * demand evidence, competitor candidates). The eyebrow + title stay
- * visible so the "Jump to surface" links at the top of the page always
- * land somewhere legible; only the body -- metrics, cards, everything
- * below -- collapses behind the dropdown toggle.
+ * demand evidence, competitor candidates). Collapsed by default -- the
+ * eyebrow + title stay visible so the "Jump to surface" links at the top
+ * of the page always land somewhere legible, but the body -- metrics,
+ * cards, everything below -- only mounts once the user opens it.
  */
 export function InvestigationResultSection({
   id,
   eyebrow,
   title,
   extraClassName,
-  defaultOpen = true,
+  defaultOpen = false,
   children,
 }: {
   /** Anchor id, matched by the "Jump to surface" links elsewhere on the page. */
